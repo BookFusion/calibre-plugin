@@ -148,6 +148,8 @@ class UploadWorker(QObject):
             self.req_body.append(self.build_req_part('metadata[issued_on]', issued_on))
         for author in metadata.authors:
             self.req_body.append(self.build_req_part('metadata[author_list][]', author))
+        for tag in metadata.tags:
+            self.req_body.append(self.build_req_part('metadata[tag_list][]', tag))
         if self.cover:
             self.req_body.append(self.build_req_part('metadata[cover]', self.cover))
 
