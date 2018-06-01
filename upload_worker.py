@@ -97,6 +97,15 @@ class UploadWorker(QObject):
             abort = True
             self.aborted.emit('Invalid API key.'.format(self.reply.error()))
         elif error == QNetworkReply.NoError:
+            resp = self.reply.readAll()
+            print 'Response: ', resp
+
+            bookfusion_id = json.loads(resp.data())['id']
+
+            identifiers = self.db.get_proxy_metadata(self.book_id).identifiers
+            identifiers['bookfusion'] = str(bookfusion_id)
+            self.db.set_field('identifiers', {self.book_id: identifiers})
+
             skip = True
             self.skipped.emit(self.book_id)
         elif error == QNetworkReply.ContentNotFoundError:
@@ -176,6 +185,15 @@ class UploadWorker(QObject):
             abort = True
             self.aborted.emit('Invalid API key.'.format(error))
         elif error == QNetworkReply.NoError:
+            resp = self.reply.readAll()
+            print 'Response: ', resp
+
+            bookfusion_id = json.loads(resp.data())['id']
+
+            identifiers = self.db.get_proxy_metadata(self.book_id).identifiers
+            identifiers['bookfusion'] = str(bookfusion_id)
+            self.db.set_field('identifiers', {self.book_id: identifiers})
+
             self.uploaded.emit(self.book_id)
         elif error == QNetworkReply.UnknownContentError:
             if self.reply.attribute(QNetworkRequest.HttpStatusCodeAttribute) == 422:
