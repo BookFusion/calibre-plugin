@@ -8,7 +8,7 @@ from calibre_plugins.bookfusion.intro import IntroWidget
 
 
 class MainDialog(QDialog):
-    def __init__(self, gui, icon, do_user_config):
+    def __init__(self, gui, do_user_config, selected_book_ids, is_sync_selected):
         QDialog.__init__(self, gui)
 
         self.gui = gui
@@ -22,7 +22,7 @@ class MainDialog(QDialog):
         self.intro = IntroWidget(gui)
         self.l.addWidget(self.intro)
 
-        self.sync = SyncWidget(gui, do_user_config)
+        self.sync = SyncWidget(gui, do_user_config, selected_book_ids, is_sync_selected)
         self.l.addWidget(self.sync)
 
         self.adjustSize()

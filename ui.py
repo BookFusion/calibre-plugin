@@ -1,6 +1,8 @@
 __copyright__ = '2018, BookFusion <legal@bookfusion.com>'
 __license__ = 'GPL v3'
 
+from PyQt5.Qt import QMenu
+
 from calibre.gui2.actions import InterfaceAction
 from calibre_plugins.bookfusion.main import MainDialog
 
@@ -8,19 +10,41 @@ from calibre_plugins.bookfusion.main import MainDialog
 class InterfacePlugin(InterfaceAction):
     name = 'BookFusion Plugin'
 
-    action_spec = ('BookFusion Sync', None,
+    action_spec = ('BookFusion', None,
                    'Sync your books to the BookFusion platform', None)
 
     def genesis(self):
-        icon = get_icons('images/icon.png')
-        self.qaction.setIcon(icon)
-        self.qaction.triggered.connect(self.show_dialog)
+        self.sync_selected_action = self.create_action(spec=('Sync Selected', None, None, None), attr='Sync Selected')
+        self.sync_selected_action.triggered.connect(self.sync_selected)
 
-    def show_dialog(self):
+        self.menu = QMenu(self.gui)
+        self.menu.addAction(self.sync_selected_action)
+        self.menu.aboutToShow.connect(self.update_menu)
+
+        self.qaction.setMenu(self.menu)
+        self.qaction.setIcon(get_icons('images/icon.png'))
+        self.qaction.triggered.connect(self.sync_all)
+
+    def sync_all(self):
+        self.show_dialog()
+
+    def sync_selected(self):
+        self.show_dialog(is_sync_selected=True)
+
+    def show_dialog(self, is_sync_selected=False):
         base_plugin_object = self.interface_action_base_plugin
         do_user_config = base_plugin_object.do_user_config
 
-        MainDialog(self.gui, self.qaction.icon(), do_user_config).show()
+        rows = self.gui.library_view.selectionModel().selectedRows()
+        selected_book_ids = []
+        for row in rows:
+            selected_book_ids.append(self.gui.library_view.model().db.id(row.row()))
+
+        MainDialog(self.gui, do_user_config, selected_book_ids, is_sync_selected).show()
+
+    def update_menu(self):
+        rows = self.gui.library_view.selectionModel().selectedRows()
+        self.sync_selected_action.setEnabled(len(rows) > 0)
 
     def apply_settings(self):
         None

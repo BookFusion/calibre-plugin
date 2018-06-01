@@ -17,10 +17,11 @@ class CheckWorker(QObject):
     limitsAvailable = pyqtSignal(dict)
     resultsAvailable = pyqtSignal(int, list)
 
-    def __init__(self, db):
+    def __init__(self, db, book_ids):
         QObject.__init__(self)
 
         self.db = db
+        self.book_ids = book_ids
         self.api_key = prefs['api_key']
         self.reply = None
         self.canceled = False
@@ -30,7 +31,7 @@ class CheckWorker(QObject):
         self.network.authenticationRequired.connect(self.auth)
         self.readyForNext.connect(self.check_next)
 
-        self.pending_book_ids = list(self.db.all_book_ids())
+        self.pending_book_ids = self.book_ids
         self.count = 0
         self.books_count = 0
         self.valid_ids = []

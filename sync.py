@@ -2,7 +2,7 @@ __copyright__ = '2018, BookFusion <legal@bookfusion.com>'
 __license__ = 'GPL v3'
 
 from PyQt5.Qt import QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QMessageBox, QLabel, QProgressBar, QThread, \
-    QTableWidget, QTableWidgetItem
+    QTableWidget, QTableWidgetItem, QRadioButton
 
 from calibre_plugins.bookfusion.config import prefs
 from calibre_plugins.bookfusion.check_worker import CheckWorker
@@ -10,7 +10,7 @@ from calibre_plugins.bookfusion.upload_worker import UploadWorker
 
 
 class SyncWidget(QWidget):
-    def __init__(self, gui, do_user_config):
+    def __init__(self, gui, do_user_config, selected_book_ids, is_sync_selected):
         QWidget.__init__(self, gui)
 
         self.worker_thread = None
@@ -18,9 +18,29 @@ class SyncWidget(QWidget):
         self.do_user_config = do_user_config
         self.db = gui.current_db.new_api
 
+        self.selected_book_ids = selected_book_ids
+
         self.l = QVBoxLayout()
         self.l.setContentsMargins(0, 0, 0, 0)
         self.setLayout(self.l)
+
+        self.radio_layout = QVBoxLayout()
+        self.l.addLayout(self.radio_layout)
+
+        self.sync_all_radio = QRadioButton('Sync all books')
+        self.sync_all_radio.setChecked(not is_sync_selected)
+        self.radio_layout.addWidget(self.sync_all_radio)
+
+        sync_selected_radio_label = 'Sync selected books'
+        if len(selected_book_ids) > 0:
+            sync_selected_radio_label = 'Sync {} selected {}'.format(
+                len(selected_book_ids),
+                'book' if len(selected_book_ids) == 1 else 'books'
+            )
+        self.sync_selected_radio = QRadioButton(sync_selected_radio_label)
+        self.sync_selected_radio.setChecked(is_sync_selected)
+        self.sync_selected_radio.setEnabled(len(selected_book_ids) > 0)
+        self.radio_layout.addWidget(self.sync_selected_radio)
 
         self.btn_layout = QHBoxLayout()
         self.l.addLayout(self.btn_layout)
@@ -80,18 +100,25 @@ class SyncWidget(QWidget):
         self.worker = None
         self.valid_book_ids = None
 
+        if self.sync_selected_radio.isChecked():
+            book_ids = self.selected_book_ids
+        else:
+            book_ids = list(self.db.all_book_ids())
+
         self.in_progress = True
-        self.total = len(self.db.all_book_ids())
+        self.total = len(book_ids)
         self.update_progress(None)
         self.start_btn.hide()
         self.cancel_btn.show()
         self.config_btn.setEnabled(False)
+        self.sync_all_radio.setEnabled(False)
+        self.sync_selected_radio.setEnabled(False)
         self.progress.setMaximum(0)
         self.progress.show()
 
         self.worker_thread = QThread()
 
-        self.worker = CheckWorker(self.db)
+        self.worker = CheckWorker(self.db, book_ids)
         self.worker.finished.connect(self.finish_check)
         self.worker.finished.connect(self.worker_thread.quit)
         self.worker.progress.connect(self.update_progress)
@@ -174,6 +201,8 @@ class SyncWidget(QWidget):
         self.progress.hide()
         self.start_btn.show()
         self.config_btn.setEnabled(True)
+        self.sync_all_radio.setEnabled(True)
+        self.sync_selected_radio.setEnabled(len(self.selected_book_ids) > 0)
 
     def abort(self, error):
         self.in_progress = False
