@@ -13,6 +13,9 @@ class SyncWidget(QWidget):
     def __init__(self, gui, do_user_config, selected_book_ids, is_sync_selected):
         QWidget.__init__(self, gui)
 
+        if len(selected_book_ids) == 0:
+            is_sync_selected = False
+
         self.worker_thread = None
 
         self.do_user_config = do_user_config
