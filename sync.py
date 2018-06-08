@@ -101,7 +101,7 @@ class SyncWidget(QWidget):
         self.valid_book_ids = None
 
         if self.sync_selected_radio.isChecked():
-            book_ids = self.selected_book_ids
+            book_ids = list(self.selected_book_ids)
         else:
             book_ids = list(self.db.all_book_ids())
 
