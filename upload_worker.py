@@ -73,17 +73,26 @@ class UploadWorker(QObject):
             self.readyForNext.emit()
 
     def check(self):
-        h = sha256()
-        h.update(str(getsize(self.file_path)))
-        h.update('\0')
-        with open(self.file_path, 'rb') as file:
-            block = file.read(65536)
-            while len(block) > 0:
-                h.update(block)
+        identifiers = self.db.get_proxy_metadata(self.book_id).identifiers
+        if identifiers.get('bookfusion'):
+            self.is_search_req = False
+            self.req = api.build_request('/uploads/' + identifiers['bookfusion'])
+        elif identifiers.get('isbn'):
+            self.is_search_req = True
+            self.req = api.build_request('/uploads', {'isbn': identifiers['isbn']})
+        else:
+            h = sha256()
+            h.update(str(getsize(self.file_path)))
+            h.update('\0')
+            with open(self.file_path, 'rb') as file:
                 block = file.read(65536)
-        digest = h.hexdigest()
+                while len(block) > 0:
+                    h.update(block)
+                    block = file.read(65536)
+            digest = h.hexdigest()
 
-        self.req = api.build_request('/uploads/' + digest)
+            self.is_search_req = False
+            self.req = api.build_request('/uploads/' + digest)
 
         self.reply = self.network.get(self.req)
         self.reply.finished.connect(self.finish_check)
@@ -100,14 +109,18 @@ class UploadWorker(QObject):
             resp = self.reply.readAll()
             print 'Response: ', resp
 
-            bookfusion_id = json.loads(resp.data())['id']
+            if self.is_search_req:
+                results = json.loads(resp.data())
+                if len(results) > 0:
+                    self.set_bookfusion_id(results[0]['id'])
 
-            identifiers = self.db.get_proxy_metadata(self.book_id).identifiers
-            identifiers['bookfusion'] = str(bookfusion_id)
-            self.db.set_field('identifiers', {self.book_id: identifiers})
+                    skip = True
+                    self.skipped.emit(self.book_id)
+            else:
+                self.set_bookfusion_id(json.loads(resp.data())['id'])
 
-            skip = True
-            self.skipped.emit(self.book_id)
+                skip = True
+                self.skipped.emit(self.book_id)
         elif error == QNetworkReply.ContentNotFoundError:
             None
         elif error == QNetworkReply.OperationCanceledError:
@@ -188,11 +201,7 @@ class UploadWorker(QObject):
             resp = self.reply.readAll()
             print 'Response: ', resp
 
-            bookfusion_id = json.loads(resp.data())['id']
-
-            identifiers = self.db.get_proxy_metadata(self.book_id).identifiers
-            identifiers['bookfusion'] = str(bookfusion_id)
-            self.db.set_field('identifiers', {self.book_id: identifiers})
+            self.set_bookfusion_id(json.loads(resp.data())['id'])
 
             self.uploaded.emit(self.book_id)
         elif error == QNetworkReply.UnknownContentError:
@@ -235,6 +244,11 @@ class UploadWorker(QObject):
 
     def escape_quotes(self, value):
         return value.replace('"', '\\"')
+
+    def set_bookfusion_id(self, bookfusion_id):
+        identifiers = self.db.get_proxy_metadata(self.book_id).identifiers
+        identifiers['bookfusion'] = str(bookfusion_id)
+        self.db.set_field('identifiers', {self.book_id: identifiers})
 
     def upload_progress(self, sent, total):
         self.uploadProgress.emit(sent, total)
