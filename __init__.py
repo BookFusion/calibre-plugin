@@ -9,7 +9,7 @@ class BookFusionPlugin(InterfaceActionBase):
     description = 'BookFusion Plugin'
     supported_platforms = ['windows', 'osx', 'linux']
     author = 'BookFusion'
-    version = (0, 2, 1)
+    version = (0, 2, 2)
     minimum_calibre_version = (3, 16, 0)
 
     actual_plugin = 'calibre_plugins.bookfusion.ui:InterfacePlugin'

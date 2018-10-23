@@ -17,10 +17,11 @@ class CheckWorker(QObject):
     limitsAvailable = pyqtSignal(dict)
     resultsAvailable = pyqtSignal(int, list)
 
-    def __init__(self, db, book_ids):
+    def __init__(self, db, logger, book_ids):
         QObject.__init__(self)
 
         self.db = db
+        self.logger = logger
         self.book_ids = book_ids
         self.api_key = prefs['api_key']
         self.reply = None
@@ -63,17 +64,20 @@ class CheckWorker(QObject):
         error = self.reply.error()
         if error == QNetworkReply.AuthenticationRequiredError:
             abort = True
-            self.aborted.emit('Invalid API key.'.format(self.reply.error()))
+            self.aborted.emit('Invalid API key.')
+            self.logger.info('Fetch limits: AuthenticationRequiredError')
         elif error == QNetworkReply.NoError:
             resp = self.reply.readAll()
-            print 'Response: ', resp
+            self.logger.info('Fetch limits response: {}'.format(resp))
             self.limits = json.loads(resp.data())
             self.limitsAvailable.emit(self.limits)
         elif error == QNetworkReply.OperationCanceledError:
             abort = True
+            self.logger.info('Fetch limits: OperationCanceledError')
         else:
             abort = True
             self.aborted.emit('Error {}.'.format(error))
+            self.logger.info('Fetch limits error: {}'.format(error))
 
         self.reply.deleteLater()
         self.reply = None
@@ -108,5 +112,10 @@ class CheckWorker(QObject):
 
             if getsize(file_path) <= self.limits['filesize']:
                 self.valid_ids.append(book_id)
+                self.logger.info('File ok: book_id={}'.format(book_id))
+            else:
+                self.logger.info('Filesize exceeded: book_id={}'.format(book_id))
+        else:
+            self.logger.info('Missing file: book_id={}'.format(book_id))
 
         self.readyForNext.emit()

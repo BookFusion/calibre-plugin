@@ -3,8 +3,10 @@ __license__ = 'GPL v3'
 
 from PyQt5.Qt import QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QMessageBox, QLabel, QProgressBar, QThread, \
     QTableWidget, QTableWidgetItem, QRadioButton
+from os import path
 
 from calibre_plugins.bookfusion.config import prefs
+from calibre_plugins.bookfusion.logger import Logger
 from calibre_plugins.bookfusion.check_worker import CheckWorker
 from calibre_plugins.bookfusion.upload_worker import UploadWorker
 
@@ -12,6 +14,9 @@ from calibre_plugins.bookfusion.upload_worker import UploadWorker
 class SyncWidget(QWidget):
     def __init__(self, gui, do_user_config, selected_book_ids, is_sync_selected):
         QWidget.__init__(self, gui)
+
+        self.logger = Logger(path.join(gui.current_db.library_path, 'bookfusion_sync.log'))
+        self.logger.info('Open sync dialog: selected_book_ids={}; is_sync_selected={}'.format(selected_book_ids, is_sync_selected))
 
         if len(selected_book_ids) == 0:
             is_sync_selected = False
@@ -108,6 +113,8 @@ class SyncWidget(QWidget):
         else:
             book_ids = list(self.db.all_book_ids())
 
+        self.logger.info('Start sync: sync_selected={}; book_ids={}'.format(self.sync_selected_radio.isChecked(), book_ids))
+
         self.in_progress = True
         self.total = len(book_ids)
         self.update_progress(None)
@@ -119,9 +126,9 @@ class SyncWidget(QWidget):
         self.progress.setMaximum(0)
         self.progress.show()
 
-        self.worker_thread = QThread()
+        self.worker_thread = QThread(self)
 
-        self.worker = CheckWorker(self.db, book_ids)
+        self.worker = CheckWorker(self.db, self.logger, book_ids)
         self.worker.finished.connect(self.finish_check)
         self.worker.finished.connect(self.worker_thread.quit)
         self.worker.progress.connect(self.update_progress)
@@ -134,11 +141,11 @@ class SyncWidget(QWidget):
         self.worker_thread.start()
 
     def apply_limits(self, limits):
-        print 'Limits: ', limits
+        self.logger.info('Limits: {}'.format(limits))
         self.limits = limits
 
     def apply_results(self, books_count, valid_ids):
-        print 'Check Results: ', books_count, valid_ids
+        self.logger.info('Check results: books_count={}; valid_ids={}'.format(books_count, valid_ids))
         self.valid_book_ids = valid_ids
         self.books_count = books_count
 
@@ -174,7 +181,7 @@ class SyncWidget(QWidget):
         self.log_btn.show()
         self.log.setRowCount(0)
 
-        self.worker_thread = QThread()
+        self.worker_thread = QThread(self)
 
         book_ids = self.valid_book_ids
         if self.limits['total_books']:
@@ -182,7 +189,7 @@ class SyncWidget(QWidget):
 
         self.total = len(book_ids)
 
-        self.worker = UploadWorker(self.db, book_ids)
+        self.worker = UploadWorker(self.db, self.logger, book_ids)
         self.worker.finished.connect(self.finish_sync)
         self.worker.finished.connect(self.worker_thread.quit)
         self.worker.progress.connect(self.update_progress)

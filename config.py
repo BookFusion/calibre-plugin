@@ -1,13 +1,14 @@
 __copyright__ = '2018, BookFusion <legal@bookfusion.com>'
 __license__ = 'GPL v3'
 
-from PyQt5.Qt import QWidget, QVBoxLayout, QFormLayout, QLabel, QLineEdit
+from PyQt5.Qt import QWidget, QVBoxLayout, QFormLayout, QLabel, QLineEdit, QCheckBox
 from calibre.utils.config import JSONConfig
 
 prefs = JSONConfig('plugins/bookfusion')
 
 prefs.defaults['api_key'] = ''
 prefs.defaults['api_base'] = 'https://www.bookfusion.com/calibre-api/v1'
+prefs.defaults['debug'] = True
 
 
 class ConfigWidget(QWidget):
@@ -38,5 +39,10 @@ class ConfigWidget(QWidget):
         self.api_key.setText(prefs['api_key'])
         self.form.addRow('API Key:', self.api_key)
 
+        self.debug = QCheckBox(self)
+        self.debug.setChecked(prefs['debug'])
+        self.form.addRow('Debug logging:', self.debug)
+
     def save_settings(self):
         prefs['api_key'] = unicode(self.api_key.text())
+        prefs['debug'] = self.debug.isChecked()
