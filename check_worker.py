@@ -12,7 +12,7 @@ from calibre_plugins.bookfusion import api
 class CheckWorker(QObject):
     finished = pyqtSignal()
     aborted = pyqtSignal(str)
-    readyForNext = pyqtSignal()
+    readyToRunCheck = pyqtSignal()
     progress = pyqtSignal(int)
     limitsAvailable = pyqtSignal(dict)
     resultsAvailable = pyqtSignal(int, list)
@@ -30,7 +30,7 @@ class CheckWorker(QObject):
     def start(self):
         self.network = QNetworkAccessManager()
         self.network.authenticationRequired.connect(self.auth)
-        self.readyForNext.connect(self.check_next)
+        self.readyToRunCheck.connect(self.run_check)
 
         self.pending_book_ids = self.book_ids
         self.count = 0
@@ -85,37 +85,35 @@ class CheckWorker(QObject):
         if abort:
             self.finished.emit()
         else:
-            self.readyForNext.emit()
+            self.readyToRunCheck.emit()
 
-    def check_next(self):
-        if self.canceled:
-            return
+    def run_check(self):
+        for book_id in self.pending_book_ids:
+            if self.canceled:
+                return
 
-        if len(self.pending_book_ids) == 0:
-            self.resultsAvailable.emit(self.books_count, self.valid_ids)
-            self.finished.emit()
-            return
+            self.progress.emit(self.count)
+            self.count += 1
 
-        self.progress.emit(self.count)
-        self.count += 1
+            self.logger.info('File: book_id={}'.format(book_id))
 
-        book_id = self.pending_book_ids.pop()
+            fmts = self.db.formats(book_id)
 
-        fmts = self.db.formats(book_id)
-        if len(fmts) > 0:
-            fmt = fmts[0]
-            if 'EPUB' in fmts:
-                fmt = 'EPUB'
-            file_path = self.db.format_abspath(book_id, fmt)
+            if len(fmts) > 0:
+                fmt = fmts[0]
+                if 'EPUB' in fmts:
+                    fmt = 'EPUB'
+                file_path = self.db.format_abspath(book_id, fmt)
 
-            self.books_count += 1
+                self.books_count += 1
 
-            if getsize(file_path) <= self.limits['filesize']:
-                self.valid_ids.append(book_id)
-                self.logger.info('File ok: book_id={}'.format(book_id))
+                if getsize(file_path) <= self.limits['filesize']:
+                    self.valid_ids.append(book_id)
+                    self.logger.info('File ok: book_id={}'.format(book_id))
+                else:
+                    self.logger.info('Filesize exceeded: book_id={}'.format(book_id))
             else:
-                self.logger.info('Filesize exceeded: book_id={}'.format(book_id))
-        else:
-            self.logger.info('Missing file: book_id={}'.format(book_id))
+                self.logger.info('Missing file: book_id={}'.format(book_id))
 
-        self.readyForNext.emit()
+        self.resultsAvailable.emit(self.books_count, self.valid_ids)
+        self.finished.emit()

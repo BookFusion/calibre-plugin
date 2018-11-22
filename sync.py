@@ -225,13 +225,14 @@ class SyncWidget(QWidget):
         self.worker.cancel()
 
     def update_progress(self, progress):
-        if isinstance(self.worker, UploadWorker):
-            msg = 'Synchronizing...'
-        else:
-            msg = 'Preparing...'
-        if progress:
-            msg += ' {} of {}'.format(progress + 1, self.total)
-        self.msg.setText(msg)
+        if self.in_progress:
+            if isinstance(self.worker, UploadWorker):
+                msg = 'Synchronizing...'
+            else:
+                msg = 'Preparing...'
+            if progress:
+                msg += ' {} of {}'.format(progress + 1, self.total)
+            self.msg.setText(msg)
 
     def update_upload_progress(self, sent, total):
         if sent < total:
