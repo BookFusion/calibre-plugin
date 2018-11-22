@@ -101,8 +101,10 @@ class CheckWorker(QObject):
 
             if len(fmts) > 0:
                 fmt = fmts[0]
-                if 'EPUB' in fmts:
-                    fmt = 'EPUB'
+                for preferred_fmt in ['EPUB', 'MOBI']:
+                    if preferred_fmt in fmts:
+                        fmt = preferred_fmt
+                        break
                 file_path = self.db.format_abspath(book_id, fmt)
 
                 self.books_count += 1
