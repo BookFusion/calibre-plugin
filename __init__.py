@@ -6,7 +6,7 @@ from calibre.customize import InterfaceActionBase
 
 class BookFusionPlugin(InterfaceActionBase):
     name = 'BookFusion Plugin'
-    description = 'BookFusion Plugin'
+    description = 'Provides synchronization of your eBooks and metadata from Calibre to your devices via the BookFusion iOS, Android & Web reader.'
     supported_platforms = ['windows', 'osx', 'linux']
     author = 'BookFusion'
     version = (0, 2, 3)
