@@ -284,6 +284,8 @@ class UploadWorker(QObject):
         language = next(iter(metadata.languages), None)
         isbn = metadata.isbn
         issued_on = metadata.pubdate.date().isoformat()
+        series = metadata.series
+        series_index = metadata.series_index
         if issued_on == '0101-01-01':
             issued_on = None
 
@@ -294,6 +296,10 @@ class UploadWorker(QObject):
             self.req_body.append(self.build_req_part('metadata[isbn]', isbn))
         if issued_on:
             self.req_body.append(self.build_req_part('metadata[issued_on]', issued_on))
+        if series:
+            self.req_body.append(self.build_req_part('metadata[series][][title]', series))
+            if series_index:
+                self.req_body.append(self.build_req_part('metadata[series][][index]', series_index))
         for author in metadata.authors:
             self.req_body.append(self.build_req_part('metadata[author_list][]', author))
         for tag in metadata.tags:
