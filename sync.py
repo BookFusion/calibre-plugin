@@ -197,6 +197,7 @@ class SyncWidget(QWidget):
         self.worker.skipped.connect(self.log_skip)
         self.worker.failed.connect(self.log_fail)
         self.worker.uploaded.connect(self.log_upload)
+        self.worker.updated.connect(self.log_update)
         self.worker.aborted.connect(self.abort)
         self.worker.moveToThread(self.worker_thread)
 
@@ -253,7 +254,7 @@ class SyncWidget(QWidget):
 
         self.log.insertRow(self.log.rowCount())
         self.log.setItem(self.log.rowCount() - 1, 0, QTableWidgetItem(title))
-        self.log.setItem(self.log.rowCount() - 1, 1, QTableWidgetItem('already uploaded'))
+        self.log.setItem(self.log.rowCount() - 1, 1, QTableWidgetItem('skipped'))
 
     def log_upload(self, book_id):
         title = self.db.get_proxy_metadata(book_id).title
@@ -261,6 +262,13 @@ class SyncWidget(QWidget):
         self.log.insertRow(self.log.rowCount())
         self.log.setItem(self.log.rowCount() - 1, 0, QTableWidgetItem(title))
         self.log.setItem(self.log.rowCount() - 1, 1, QTableWidgetItem('uploaded'))
+
+    def log_update(self, book_id):
+        title = self.db.get_proxy_metadata(book_id).title
+
+        self.log.insertRow(self.log.rowCount())
+        self.log.setItem(self.log.rowCount() - 1, 0, QTableWidgetItem(title))
+        self.log.setItem(self.log.rowCount() - 1, 1, QTableWidgetItem('updated'))
 
     def toggle_log(self, _):
         self.log.setVisible(not self.log.isVisible())

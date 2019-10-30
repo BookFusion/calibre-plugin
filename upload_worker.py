@@ -17,6 +17,7 @@ class UploadWorker(QObject):
     progress = pyqtSignal(int)
     uploadProgress = pyqtSignal(int, int)
     uploaded = pyqtSignal(int)
+    updated = pyqtSignal(int)
     skipped = pyqtSignal(int)
     failed = pyqtSignal(int, str)
     aborted = pyqtSignal(str)
@@ -105,6 +106,7 @@ class UploadWorker(QObject):
     def finish_check(self):
         abort = False
         skip = False
+        update = False
 
         error = self.reply.error()
         if error == QNetworkReply.AuthenticationRequiredError:
@@ -119,14 +121,10 @@ class UploadWorker(QObject):
                 results = json.loads(resp.data())
                 if len(results) > 0:
                     self.set_bookfusion_id(results[0]['id'])
-
-                    skip = True
-                    self.skipped.emit(self.book_id)
+                    update = True
             else:
                 self.set_bookfusion_id(json.loads(resp.data())['id'])
-
-                skip = True
-                self.skipped.emit(self.book_id)
+                update = True
         elif error == QNetworkReply.ContentNotFoundError:
             self.logger.info('Upload check: ContentNotFoundError')
         elif error == QNetworkReply.OperationCanceledError:
@@ -145,6 +143,8 @@ class UploadWorker(QObject):
         else:
             if skip:
                 self.readyForNext.emit()
+            elif update:
+                self.update()
             else:
                 self.upload()
 
@@ -159,37 +159,20 @@ class UploadWorker(QObject):
         else:
             self.cover = None
 
-        metadata = self.db.get_proxy_metadata(self.book_id)
-        language = next(iter(metadata.languages), None)
-        isbn = metadata.isbn
-        issued_on = metadata.pubdate.date().isoformat()
-        if issued_on == '0101-01-01':
-            issued_on = None
-
         self.req = api.build_request('/uploads')
 
         self.req_body = QHttpMultiPart(QHttpMultiPart.FormDataType)
-        self.req_body.append(self.build_req_part('metadata[title]', metadata.title))
-        if language:
-            self.req_body.append(self.build_req_part('metadata[language]', language))
-        if isbn:
-            self.req_body.append(self.build_req_part('metadata[isbn]', isbn))
-        if issued_on:
-            self.req_body.append(self.build_req_part('metadata[issued_on]', issued_on))
-        for author in metadata.authors:
-            self.req_body.append(self.build_req_part('metadata[author_list][]', author))
-        for tag in metadata.tags:
-            self.req_body.append(self.build_req_part('metadata[tag_list][]', tag))
+        self.append_metadata_req_parts()
         if self.cover:
             self.req_body.append(self.build_req_part('metadata[cover]', self.cover))
 
         self.req_body.append(self.build_req_part('file', self.file))
 
         self.reply = self.network.post(self.req, self.req_body)
-        self.reply.finished.connect(self.finish)
+        self.reply.finished.connect(self.finish_upload)
         self.reply.uploadProgress.connect(self.upload_progress)
 
-    def finish(self):
+    def finish_upload(self):
         if self.file:
             self.file.close()
 
@@ -236,6 +219,86 @@ class UploadWorker(QObject):
             self.finished.emit()
         else:
             self.readyForNext.emit()
+
+    def update(self):
+        if not prefs['update_metadata']:
+            self.skipped.emit(self.book_id)
+            self.readyForNext.emit()
+            return
+
+        identifiers = self.db.get_proxy_metadata(self.book_id).identifiers
+        if not identifiers.get('bookfusion'):
+            self.skipped.emit(self.book_id)
+            self.readyForNext.emit()
+            return
+
+        self.req = api.build_request('/uploads/' + identifiers['bookfusion'])
+        self.req_body = QHttpMultiPart(QHttpMultiPart.FormDataType)
+        self.append_metadata_req_parts()
+
+        self.reply = self.network.put(self.req, self.req_body)
+        self.reply.finished.connect(self.finish_update)
+
+    def finish_update(self):
+        if self.canceled:
+            return
+
+        abort = False
+
+        error = self.reply.error()
+        if error == QNetworkReply.AuthenticationRequiredError:
+            abort = True
+            self.aborted.emit('Invalid API key.')
+            self.logger.info('Update: AuthenticationRequiredError')
+        elif error == QNetworkReply.NoError:
+            resp = self.reply.readAll()
+            self.logger.info('Update response: {}'.format(resp))
+
+            self.updated.emit(self.book_id)
+        elif error == QNetworkReply.UnknownContentError:
+            if self.reply.attribute(QNetworkRequest.HttpStatusCodeAttribute) == 422:
+                resp = self.reply.readAll()
+                self.logger.info('Update response: {}'.format(resp))
+                msg = json.loads(resp.data())['error']
+                self.failed.emit(self.book_id, msg)
+            else:
+                self.logger.info('Update: UnknownContentError')
+        elif error == QNetworkReply.OperationCanceledError:
+            abort = True
+            self.logger.info('Update: OperationCanceledError')
+        else:
+            abort = True
+            self.aborted.emit('Error {}.'.format(error))
+            self.logger.info('Update error: {}'.format(error))
+
+        self.reply.deleteLater()
+        self.reply = None
+
+        if abort:
+            self.finished.emit()
+        else:
+            self.readyForNext.emit()
+
+    def append_metadata_req_parts(self):
+        metadata = self.db.get_proxy_metadata(self.book_id)
+        language = next(iter(metadata.languages), None)
+        isbn = metadata.isbn
+        issued_on = metadata.pubdate.date().isoformat()
+        if issued_on == '0101-01-01':
+            issued_on = None
+
+        self.req_body.append(self.build_req_part('metadata[title]', metadata.title))
+        if language:
+            self.req_body.append(self.build_req_part('metadata[language]', language))
+        if isbn:
+            self.req_body.append(self.build_req_part('metadata[isbn]', isbn))
+        if issued_on:
+            self.req_body.append(self.build_req_part('metadata[issued_on]', issued_on))
+        for author in metadata.authors:
+            self.req_body.append(self.build_req_part('metadata[author_list][]', author))
+        for tag in metadata.tags:
+            self.req_body.append(self.build_req_part('metadata[tag_list][]', tag))
+
 
     def build_req_part(self, name, value):
         part = QHttpPart()

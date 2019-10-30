@@ -1,7 +1,7 @@
 __copyright__ = '2018, BookFusion <legal@bookfusion.com>'
 __license__ = 'GPL v3'
 
-from PyQt5.Qt import QWidget, QVBoxLayout, QFormLayout, QLabel, QLineEdit, QCheckBox
+from PyQt5.Qt import QWidget, QHBoxLayout, QVBoxLayout, QFormLayout, QLabel, QLineEdit, QCheckBox
 from calibre.utils.config import JSONConfig
 
 prefs = JSONConfig('plugins/bookfusion')
@@ -9,6 +9,7 @@ prefs = JSONConfig('plugins/bookfusion')
 prefs.defaults['api_key'] = ''
 prefs.defaults['api_base'] = 'https://www.bookfusion.com/calibre-api/v1'
 prefs.defaults['debug'] = True
+prefs.defaults['update_metadata'] = False
 
 
 class ConfigWidget(QWidget):
@@ -41,8 +42,21 @@ class ConfigWidget(QWidget):
 
         self.debug = QCheckBox(self)
         self.debug.setChecked(prefs['debug'])
-        self.form.addRow('Debug logging:', self.debug)
+        self.form.addRow('Debug Logging:', self.debug)
+
+        self.update_metadata_layout = QHBoxLayout()
+        self.update_metadata_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.update_metadata = QCheckBox(self)
+        self.update_metadata.setChecked(prefs['update_metadata'])
+        self.update_metadata_layout.addWidget(self.update_metadata)
+
+        self.update_metadata_hint = QLabel('(sync all metadata changes made)')
+        self.update_metadata_layout.addWidget(self.update_metadata_hint)
+
+        self.form.addRow('Update Metadata:', self.update_metadata_layout)
 
     def save_settings(self):
         prefs['api_key'] = unicode(self.api_key.text())
         prefs['debug'] = self.debug.isChecked()
+        prefs['update_metadata'] = self.update_metadata.isChecked()
