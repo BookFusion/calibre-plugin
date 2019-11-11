@@ -282,6 +282,7 @@ class UploadWorker(QObject):
     def append_metadata_req_parts(self):
         metadata = self.db.get_proxy_metadata(self.book_id)
         language = next(iter(metadata.languages), None)
+        summary = metadata.comments
         isbn = metadata.isbn
         issued_on = metadata.pubdate.date().isoformat()
         series = metadata.series
@@ -290,6 +291,8 @@ class UploadWorker(QObject):
             issued_on = None
 
         self.req_body.append(self.build_req_part('metadata[title]', metadata.title))
+        if summary:
+            self.req_body.append(self.build_req_part('metadata[summary]', summary))
         if language:
             self.req_body.append(self.build_req_part('metadata[language]', language))
         if isbn:
