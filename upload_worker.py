@@ -152,19 +152,10 @@ class UploadWorker(QObject):
         self.file = QFile(self.file_path)
         self.file.open(QIODevice.ReadOnly)
 
-        cover_path = self.db.cover(self.book_id, as_path=True)
-        if cover_path:
-            self.cover = QFile(cover_path)
-            self.cover.open(QIODevice.ReadOnly)
-        else:
-            self.cover = None
-
         self.req = api.build_request('/uploads')
 
         self.req_body = QHttpMultiPart(QHttpMultiPart.FormDataType)
         self.append_metadata_req_parts()
-        if self.cover:
-            self.req_body.append(self.build_req_part('metadata[cover]', self.cover))
 
         self.req_body.append(self.build_req_part('file', self.file))
 
@@ -176,8 +167,7 @@ class UploadWorker(QObject):
         if self.file:
             self.file.close()
 
-        if self.cover:
-            self.cover.remove()
+        self.clean_metadata_req()
 
         if self.canceled:
             return
@@ -240,6 +230,8 @@ class UploadWorker(QObject):
         self.reply.finished.connect(self.finish_update)
 
     def finish_update(self):
+        self.clean_metadata_req()
+
         if self.canceled:
             return
 
@@ -308,6 +300,17 @@ class UploadWorker(QObject):
         for tag in metadata.tags:
             self.req_body.append(self.build_req_part('metadata[tag_list][]', tag))
 
+        cover_path = self.db.cover(self.book_id, as_path=True)
+        if cover_path:
+            self.cover = QFile(cover_path)
+            self.cover.open(QIODevice.ReadOnly)
+            self.req_body.append(self.build_req_part('metadata[cover]', self.cover))
+        else:
+            self.cover = None
+
+    def clean_metadata_req(self):
+        if self.cover:
+            self.cover.remove()
 
     def build_req_part(self, name, value):
         part = QHttpPart()
