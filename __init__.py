@@ -9,7 +9,7 @@ class BookFusionPlugin(InterfaceActionBase):
     description = 'Provides synchronization of your eBooks and metadata from Calibre to your devices via the BookFusion iOS, Android & Web reader.'
     supported_platforms = ['windows', 'osx', 'linux']
     author = 'BookFusion'
-    version = (0, 3, 2)
+    version = (0, 3, 3)
     minimum_calibre_version = (3, 16, 0)
 
     actual_plugin = 'calibre_plugins.bookfusion.ui:InterfacePlugin'

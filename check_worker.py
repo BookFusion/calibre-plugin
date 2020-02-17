@@ -7,6 +7,7 @@ import json
 
 from calibre_plugins.bookfusion.config import prefs
 from calibre_plugins.bookfusion import api
+from calibre_plugins.bookfusion.book_format import BookFormat
 
 
 class CheckWorker(QObject):
@@ -97,25 +98,18 @@ class CheckWorker(QObject):
 
             self.logger.info('File: book_id={}'.format(book_id))
 
-            fmts = self.db.formats(book_id)
+            book_format = BookFormat(self.db, book_id)
 
-            if len(fmts) > 0:
-                fmt = fmts[0]
-                for preferred_fmt in ['EPUB', 'MOBI']:
-                    if preferred_fmt in fmts:
-                        fmt = preferred_fmt
-                        break
-                file_path = self.db.format_abspath(book_id, fmt)
-
+            if book_format.file_path:
                 self.books_count += 1
 
-                if getsize(file_path) <= self.limits['filesize']:
+                if getsize(book_format.file_path) <= self.limits['filesize']:
                     self.valid_ids.append(book_id)
                     self.logger.info('File ok: book_id={}'.format(book_id))
                 else:
                     self.logger.info('Filesize exceeded: book_id={}'.format(book_id))
             else:
-                self.logger.info('Missing file: book_id={}'.format(book_id))
+                self.logger.info('Unsupported format: book_id={}'.format(book_id))
 
         self.resultsAvailable.emit(self.books_count, self.valid_ids)
         self.finished.emit()

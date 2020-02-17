@@ -9,6 +9,7 @@ import json
 
 from calibre_plugins.bookfusion.config import prefs
 from calibre_plugins.bookfusion import api
+from calibre_plugins.bookfusion.book_format import BookFormat
 
 
 class UploadWorker(QObject):
@@ -63,16 +64,13 @@ class UploadWorker(QObject):
 
         self.logger.info('Upload book: book_id={}; title={}'.format(self.book_id, self.db.get_proxy_metadata(self.book_id).title))
 
-        fmts = self.db.formats(self.book_id)
-        if len(fmts) > 0:
-            fmt = fmts[0]
-            if 'EPUB' in fmts:
-                fmt = 'EPUB'
-            self.file_path = self.db.format_abspath(self.book_id, fmt)
+        book_format = BookFormat(self.db, self.book_id)
 
+        if book_format.file_path:
+            self.file_path = book_format.file_path
             self.check()
         else:
-            self.failed.emit(self.book_id, 'file is missing')
+            self.failed.emit(self.book_id, 'unsupported format')
             self.readyForNext.emit()
 
     def check(self):
