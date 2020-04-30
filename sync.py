@@ -175,6 +175,7 @@ class SyncWidget(QWidget):
                 self.start_sync()
         else:
             self.in_progress = False
+            self.msg.setText('No supported books selected.')
             self.finish_sync()
 
     def start_sync(self):
