@@ -9,26 +9,23 @@ import json
 
 from calibre_plugins.bookfusion.config import prefs
 from calibre_plugins.bookfusion import api
-from calibre_plugins.bookfusion.book_format import BookFormat
 
 
 class UploadWorker(QObject):
-    finished = pyqtSignal()
-    readyForNext = pyqtSignal()
-    progress = pyqtSignal(int)
-    uploadProgress = pyqtSignal(int, int)
+    readyForNext = pyqtSignal(int)
+    uploadProgress = pyqtSignal(int, int, int)
     uploaded = pyqtSignal(int)
     updated = pyqtSignal(int)
     skipped = pyqtSignal(int)
     failed = pyqtSignal(int, str)
     aborted = pyqtSignal(str)
 
-    def __init__(self, db, logger, book_ids):
+    def __init__(self, index, db, logger):
         QObject.__init__(self)
 
+        self.index = index
         self.db = db
         self.logger = logger
-        self.pending_book_ids = book_ids
         self.api_key = prefs['api_key']
         self.reply = None
         self.canceled = False
@@ -36,53 +33,35 @@ class UploadWorker(QObject):
     def start(self):
         self.network = QNetworkAccessManager()
         self.network.authenticationRequired.connect(self.auth)
-        self.readyForNext.connect(self.sync)
 
-        self.count = 0
-        self.readyForNext.emit()
+        self.readyForNext.emit(self.index)
 
     def cancel(self):
         self.canceled = True
         if self.reply:
             self.reply.abort()
-        self.finished.emit()
+
+    def sync(self, book_id, file_path):
+        self.book_id = book_id
+        self.file_path = file_path
+
+        self.check()
 
     def auth(self, reply, authenticator):
         if not authenticator.user():
             authenticator.setUser(self.api_key)
             authenticator.setPassword('')
 
-    def sync(self):
-        if len(self.pending_book_ids) == 0:
-            self.finished.emit()
-            return
-
-        self.progress.emit(self.count)
-        self.count += 1
-
-        self.book_id = self.pending_book_ids.pop()
-
-        self.logger.info('Upload book: book_id={}; title={}'.format(self.book_id, self.db.get_proxy_metadata(self.book_id).title))
-
-        book_format = BookFormat(self.db, self.book_id)
-
-        if book_format.file_path:
-            self.file_path = book_format.file_path
-            self.check()
-        else:
-            self.failed.emit(self.book_id, 'unsupported format')
-            self.readyForNext.emit()
-
     def check(self):
         identifiers = self.db.get_proxy_metadata(self.book_id).identifiers
         if identifiers.get('bookfusion'):
             self.is_search_req = False
             self.req = api.build_request('/uploads/' + identifiers['bookfusion'])
-            self.logger.info('Upload check: bookfusion={}'.format(identifiers['bookfusion']))
+            self.log_info('Upload check: bookfusion={}'.format(identifiers['bookfusion']))
         elif identifiers.get('isbn'):
             self.is_search_req = True
             self.req = api.build_request('/uploads', {'isbn': identifiers['isbn']})
-            self.logger.info('Upload check: isbn={}'.format(identifiers['isbn']))
+            self.log_info('Upload check: isbn={}'.format(identifiers['isbn']))
         else:
             h = sha256()
             h.update(str(getsize(self.file_path)))
@@ -96,7 +75,7 @@ class UploadWorker(QObject):
 
             self.is_search_req = False
             self.req = api.build_request('/uploads/' + digest)
-            self.logger.info('Upload check: digest={}'.format(digest))
+            self.log_info('Upload check: digest={}'.format(digest))
 
         self.reply = self.network.get(self.req)
         self.reply.finished.connect(self.finish_check)
@@ -110,10 +89,10 @@ class UploadWorker(QObject):
         if error == QNetworkReply.AuthenticationRequiredError:
             abort = True
             self.aborted.emit('Invalid API key.')
-            self.logger.info('Upload check: AuthenticationRequiredError')
+            self.log_info('Upload check: AuthenticationRequiredError')
         elif error == QNetworkReply.NoError:
             resp = self.reply.readAll()
-            self.logger.info('Upload check response: {}'.format(resp))
+            self.log_info('Upload check response: {}'.format(resp))
 
             if self.is_search_req:
                 results = json.loads(resp.data())
@@ -124,23 +103,29 @@ class UploadWorker(QObject):
                 self.set_bookfusion_id(json.loads(resp.data())['id'])
                 update = True
         elif error == QNetworkReply.ContentNotFoundError:
-            self.logger.info('Upload check: ContentNotFoundError')
+            self.log_info('Upload check: ContentNotFoundError')
+        elif error == QNetworkReply.InternalServerError:
+            self.log_info('Upload check: InternalServerError')
+            resp = self.reply.readAll()
+            self.log_info('Upload check response: {}'.format(resp))
+        elif error == QNetworkReply.UnknownServerError:
+            self.log_info('Upload check: UnknownServerError')
+            resp = self.reply.readAll()
+            self.log_info('Upload check response: {}'.format(resp))
         elif error == QNetworkReply.OperationCanceledError:
             abort = True
-            self.logger.info('Upload check: OperationCanceledError')
+            self.log_info('Upload check: OperationCanceledError')
         else:
             abort = True
             self.aborted.emit('Error {}.'.format(error))
-            self.logger.info('Upload check error: {}'.format(error))
+            self.log_info('Upload check error: {}'.format(error))
 
         self.reply.deleteLater()
         self.reply = None
 
-        if abort:
-            self.finished.emit()
-        else:
+        if not abort:
             if skip:
-                self.readyForNext.emit()
+                self.readyForNext.emit(self.index)
             elif update:
                 self.update()
             else:
@@ -176,10 +161,10 @@ class UploadWorker(QObject):
         if error == QNetworkReply.AuthenticationRequiredError:
             abort = True
             self.aborted.emit('Invalid API key.')
-            self.logger.info('Upload: AuthenticationRequiredError')
+            self.log_info('Upload: AuthenticationRequiredError')
         elif error == QNetworkReply.NoError:
             resp = self.reply.readAll()
-            self.logger.info('Upload response: {}'.format(resp))
+            self.log_info('Upload response: {}'.format(resp))
 
             self.set_bookfusion_id(json.loads(resp.data())['id'])
 
@@ -187,37 +172,43 @@ class UploadWorker(QObject):
         elif error == QNetworkReply.UnknownContentError:
             if self.reply.attribute(QNetworkRequest.HttpStatusCodeAttribute) == 422:
                 resp = self.reply.readAll()
-                self.logger.info('Upload response: {}'.format(resp))
+                self.log_info('Upload response: {}'.format(resp))
                 msg = json.loads(resp.data())['error']
                 self.failed.emit(self.book_id, msg)
             else:
-                self.logger.info('Upload: UnknownContentError')
+                self.log_info('Upload: UnknownContentError')
+        elif error == QNetworkReply.InternalServerError:
+            self.log_info('Upload check: InternalServerError')
+            resp = self.reply.readAll()
+            self.log_info('Upload check response: {}'.format(resp))
+        elif error == QNetworkReply.UnknownServerError:
+            self.log_info('Upload check: UnknownServerError')
+            resp = self.reply.readAll()
+            self.log_info('Upload check response: {}'.format(resp))
         elif error == QNetworkReply.OperationCanceledError:
             abort = True
-            self.logger.info('Upload: OperationCanceledError')
+            self.log_info('Upload: OperationCanceledError')
         else:
             abort = True
             self.aborted.emit('Error {}.'.format(error))
-            self.logger.info('Upload error: {}'.format(error))
+            self.log_info('Upload error: {}'.format(error))
 
         self.reply.deleteLater()
         self.reply = None
 
-        if abort:
-            self.finished.emit()
-        else:
-            self.readyForNext.emit()
+        if not abort:
+            self.readyForNext.emit(self.index)
 
     def update(self):
         if not prefs['update_metadata']:
             self.skipped.emit(self.book_id)
-            self.readyForNext.emit()
+            self.readyForNext.emit(self.index)
             return
 
         identifiers = self.db.get_proxy_metadata(self.book_id).identifiers
         if not identifiers.get('bookfusion'):
             self.skipped.emit(self.book_id)
-            self.readyForNext.emit()
+            self.readyForNext.emit(self.index)
             return
 
         self.req = api.build_request('/uploads/' + identifiers['bookfusion'])
@@ -239,35 +230,47 @@ class UploadWorker(QObject):
         if error == QNetworkReply.AuthenticationRequiredError:
             abort = True
             self.aborted.emit('Invalid API key.')
-            self.logger.info('Update: AuthenticationRequiredError')
+            self.log_info('Update: AuthenticationRequiredError')
         elif error == QNetworkReply.NoError:
             resp = self.reply.readAll()
-            self.logger.info('Update response: {}'.format(resp))
+            self.log_info('Update response: {}'.format(resp))
 
             self.updated.emit(self.book_id)
         elif error == QNetworkReply.UnknownContentError:
             if self.reply.attribute(QNetworkRequest.HttpStatusCodeAttribute) == 422:
                 resp = self.reply.readAll()
-                self.logger.info('Update response: {}'.format(resp))
+                self.log_info('Update response: {}'.format(resp))
                 msg = json.loads(resp.data())['error']
                 self.failed.emit(self.book_id, msg)
             else:
-                self.logger.info('Update: UnknownContentError')
+                self.log_info('Update: UnknownContentError')
+        elif error == QNetworkReply.InternalServerError:
+            self.log_info('Upload check: InternalServerError')
+            resp = self.reply.readAll()
+            self.log_info('Upload check response: {}'.format(resp))
+        elif error == QNetworkReply.UnknownServerError:
+            self.log_info('Upload check: UnknownServerError')
+            resp = self.reply.readAll()
+            self.log_info('Upload check response: {}'.format(resp))
         elif error == QNetworkReply.OperationCanceledError:
             abort = True
-            self.logger.info('Update: OperationCanceledError')
+            self.log_info('Update: OperationCanceledError')
         else:
             abort = True
             self.aborted.emit('Error {}.'.format(error))
-            self.logger.info('Update error: {}'.format(error))
+            self.log_info('Update error: {}'.format(error))
 
         self.reply.deleteLater()
         self.reply = None
 
-        if abort:
-            self.finished.emit()
-        else:
-            self.readyForNext.emit()
+        if not abort:
+            self.readyForNext.emit(self.index)
+
+    def upload_progress(self, sent, total):
+        self.uploadProgress.emit(self.book_id, sent, total)
+
+    def log_info(self, msg):
+        self.logger.info('[worker-{}] {}'.format(self.index, msg))
 
     def append_metadata_req_parts(self):
         metadata = self.db.get_proxy_metadata(self.book_id)
@@ -335,6 +338,3 @@ class UploadWorker(QObject):
         identifiers = self.db.get_proxy_metadata(self.book_id).identifiers
         identifiers['bookfusion'] = str(bookfusion_id)
         self.db.set_field('identifiers', {self.book_id: identifiers})
-
-    def upload_progress(self, sent, total):
-        self.uploadProgress.emit(sent, total)

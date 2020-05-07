@@ -1,7 +1,7 @@
 __copyright__ = '2018, BookFusion <legal@bookfusion.com>'
 __license__ = 'GPL v3'
 
-from PyQt5.Qt import QWidget, QHBoxLayout, QVBoxLayout, QFormLayout, QLabel, QLineEdit, QCheckBox
+from PyQt5.Qt import QWidget, QHBoxLayout, QVBoxLayout, QFormLayout, QLabel, QLineEdit, QCheckBox, QComboBox
 from calibre.utils.config import JSONConfig
 
 prefs = JSONConfig('plugins/bookfusion')
@@ -10,6 +10,7 @@ prefs.defaults['api_key'] = ''
 prefs.defaults['api_base'] = 'https://www.bookfusion.com/calibre-api/v1'
 prefs.defaults['debug'] = True
 prefs.defaults['update_metadata'] = False
+prefs.defaults['threads'] = 2
 
 
 class ConfigWidget(QWidget):
@@ -56,7 +57,14 @@ class ConfigWidget(QWidget):
 
         self.form.addRow('Update Metadata:', self.update_metadata_layout)
 
+        self.threads = QComboBox(self)
+        for n in range(3):
+            self.threads.addItem(str(pow(2, n)))
+        self.threads.setCurrentText(str(prefs['threads']))
+        self.form.addRow('Sync Threads:', self.threads)
+
     def save_settings(self):
         prefs['api_key'] = unicode(self.api_key.text())
         prefs['debug'] = self.debug.isChecked()
         prefs['update_metadata'] = self.update_metadata.isChecked()
+        prefs['threads'] = int(self.threads.currentText())

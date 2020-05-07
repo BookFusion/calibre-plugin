@@ -1,14 +1,14 @@
 __copyright__ = '2018, BookFusion <legal@bookfusion.com>'
 __license__ = 'GPL v3'
 
-from PyQt5.Qt import QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QMessageBox, QLabel, QProgressBar, QThread, \
+from PyQt5.Qt import Qt, QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QMessageBox, QLabel, QProgressBar, QThread, \
     QTableWidget, QTableWidgetItem, QRadioButton
 from os import path
 
 from calibre_plugins.bookfusion.config import prefs
 from calibre_plugins.bookfusion.logger import Logger
 from calibre_plugins.bookfusion.check_worker import CheckWorker
-from calibre_plugins.bookfusion.upload_worker import UploadWorker
+from calibre_plugins.bookfusion.upload_manager import UploadManager
 
 
 class SyncWidget(QWidget):
@@ -68,10 +68,6 @@ class SyncWidget(QWidget):
         self.cancel_btn.hide()
         self.btn_layout.addWidget(self.cancel_btn)
 
-        self.progress = QProgressBar()
-        self.progress.hide()
-        self.l.addWidget(self.progress)
-
         self.info = QHBoxLayout()
         self.info.setContentsMargins(0, 0, 0, 0)
         self.l.addLayout(self.info)
@@ -107,6 +103,8 @@ class SyncWidget(QWidget):
     def start(self):
         self.worker = None
         self.valid_book_ids = None
+        self.book_log_map = {}
+        self.book_progress_map = {}
 
         if self.sync_selected_radio.isChecked():
             book_ids = list(self.selected_book_ids)
@@ -123,8 +121,6 @@ class SyncWidget(QWidget):
         self.config_btn.setEnabled(False)
         self.sync_all_radio.setEnabled(False)
         self.sync_selected_radio.setEnabled(False)
-        self.progress.setMaximum(0)
-        self.progress.show()
 
         self.worker_thread = QThread(self)
 
@@ -181,6 +177,7 @@ class SyncWidget(QWidget):
     def start_sync(self):
         self.log_btn.show()
         self.log.setRowCount(0)
+        self.log.show()
 
         self.worker_thread = QThread(self)
 
@@ -190,11 +187,12 @@ class SyncWidget(QWidget):
 
         self.total = len(book_ids)
 
-        self.worker = UploadWorker(self.db, self.logger, book_ids)
+        self.worker = UploadManager(self.db, self.logger, book_ids)
         self.worker.finished.connect(self.finish_sync)
         self.worker.finished.connect(self.worker_thread.quit)
         self.worker.progress.connect(self.update_progress)
         self.worker.uploadProgress.connect(self.update_upload_progress)
+        self.worker.started.connect(self.log_start)
         self.worker.skipped.connect(self.log_skip)
         self.worker.failed.connect(self.log_fail)
         self.worker.uploaded.connect(self.log_upload)
@@ -210,7 +208,6 @@ class SyncWidget(QWidget):
             self.msg.setText('Done.')
         self.cancel_btn.hide()
         self.cancel_btn.setEnabled(True)
-        self.progress.hide()
         self.start_btn.show()
         self.config_btn.setEnabled(True)
         self.sync_all_radio.setEnabled(True)
@@ -228,7 +225,7 @@ class SyncWidget(QWidget):
 
     def update_progress(self, progress):
         if self.in_progress:
-            if isinstance(self.worker, UploadWorker):
+            if isinstance(self.worker, UploadManager):
                 msg = 'Synchronizing...'
             else:
                 msg = 'Preparing...'
@@ -236,43 +233,62 @@ class SyncWidget(QWidget):
                 msg += ' {} of {}'.format(progress + 1, self.total)
             self.msg.setText(msg)
 
-    def update_upload_progress(self, sent, total):
+    def update_upload_progress(self, book_id, sent, total):
+        if not book_id in self.book_progress_map:
+            return
+
+        progress = self.book_progress_map[book_id]
+
         if sent < total:
-            self.progress.setValue(sent)
-            self.progress.setMaximum(total)
+            progress.setValue(sent)
+            progress.setMaximum(total)
         else:
-            self.progress.setMaximum(0)
+            progress.setMaximum(0)
+
+    def log_start(self, book_id):
+        self.update_log(book_id, None)
 
     def log_fail(self, book_id, msg):
-        title = self.db.get_proxy_metadata(book_id).title
-
-        self.log.insertRow(self.log.rowCount())
-        self.log.setItem(self.log.rowCount() - 1, 0, QTableWidgetItem(title))
-        self.log.setItem(self.log.rowCount() - 1, 1, QTableWidgetItem(msg))
+        self.update_log(book_id, msg)
 
     def log_skip(self, book_id):
-        title = self.db.get_proxy_metadata(book_id).title
-
-        self.log.insertRow(self.log.rowCount())
-        self.log.setItem(self.log.rowCount() - 1, 0, QTableWidgetItem(title))
-        self.log.setItem(self.log.rowCount() - 1, 1, QTableWidgetItem('skipped'))
+        self.update_log(book_id, 'skipped')
 
     def log_upload(self, book_id):
-        title = self.db.get_proxy_metadata(book_id).title
-
-        self.log.insertRow(self.log.rowCount())
-        self.log.setItem(self.log.rowCount() - 1, 0, QTableWidgetItem(title))
-        self.log.setItem(self.log.rowCount() - 1, 1, QTableWidgetItem('uploaded'))
+        self.update_log(book_id, 'uploaded')
 
     def log_update(self, book_id):
-        title = self.db.get_proxy_metadata(book_id).title
-
-        self.log.insertRow(self.log.rowCount())
-        self.log.setItem(self.log.rowCount() - 1, 0, QTableWidgetItem(title))
-        self.log.setItem(self.log.rowCount() - 1, 1, QTableWidgetItem('updated'))
+        self.update_log(book_id, 'updated')
 
     def toggle_log(self, _):
         self.log.setVisible(not self.log.isVisible())
+
+    def update_log(self, book_id, msg):
+        if book_id in self.book_log_map:
+            index = self.book_log_map[book_id]
+        else:
+            index = self.log.rowCount()
+            self.book_log_map[book_id] = index
+
+            self.log.insertRow(index)
+
+            title = self.db.get_proxy_metadata(book_id).title
+            title_item = QTableWidgetItem(title)
+            title_item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemNeverHasChildren)
+            self.log.setItem(index, 0, title_item)
+
+            progress = QProgressBar()
+            progress.setMaximum(0)
+            self.log.setCellWidget(index, 1, progress)
+            self.book_progress_map[book_id] = progress
+
+        if not msg is None:
+            del(self.book_progress_map[book_id])
+            self.log.setCellWidget(index, 1, None)
+
+            msg_item = QTableWidgetItem(msg)
+            msg_item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemNeverHasChildren)
+            self.log.setItem(index, 1, msg_item)
 
     def maybe_cancel(self):
         if self.worker_thread and self.worker_thread.isRunning():
