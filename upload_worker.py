@@ -84,6 +84,7 @@ class UploadWorker(QObject):
         abort = False
         skip = False
         update = False
+        result = None
 
         error = self.reply.error()
         if error == QNetworkReply.AuthenticationRequiredError:
@@ -97,10 +98,12 @@ class UploadWorker(QObject):
             if self.is_search_req:
                 results = json.loads(resp.data())
                 if len(results) > 0:
-                    self.set_bookfusion_id(results[0]['id'])
-                    update = True
+                    result = results[0]
             else:
-                self.set_bookfusion_id(json.loads(resp.data())['id'])
+                result = json.loads(resp.data())
+
+            if result is not None:
+                self.set_bookfusion_id(result['id'])
                 update = True
         elif error == QNetworkReply.ContentNotFoundError:
             self.log_info('Upload check: ContentNotFoundError')
@@ -126,10 +129,16 @@ class UploadWorker(QObject):
         if not abort:
             if skip:
                 self.readyForNext.emit(self.index)
-            elif update:
-                self.update()
             else:
-                self.upload()
+                self.metadata_digest = self.get_metadata_digest()
+                if not result is None and self.metadata_digest == result['calibre_metadata_digest']:
+                    self.skipped.emit(self.book_id)
+                    self.readyForNext.emit(self.index)
+                else:
+                    if update:
+                        self.update()
+                    else:
+                        self.upload()
 
     def upload(self):
         self.file = QFile(self.file_path)
@@ -272,6 +281,50 @@ class UploadWorker(QObject):
     def log_info(self, msg):
         self.logger.info('[worker-{}] {}'.format(self.index, msg))
 
+    def get_metadata_digest(self):
+        metadata = self.db.get_proxy_metadata(self.book_id)
+
+        h = sha256()
+
+        language = next(iter(metadata.languages), None)
+        summary = metadata.comments
+        isbn = metadata.isbn
+        issued_on = metadata.pubdate.date().isoformat()
+        series = metadata.series
+        series_index = metadata.series_index
+        if issued_on == '0101-01-01':
+            issued_on = None
+
+        h.update(metadata.title)
+        if summary:
+            h.update(summary)
+        if language:
+            h.update(language)
+        if isbn:
+            h.update(isbn)
+        if issued_on:
+            h.update(issued_on)
+        if series:
+            h.update(series)
+            if series_index:
+                h.update(series_index)
+        for author in metadata.authors:
+            h.update(author)
+        for tag in metadata.tags:
+            h.update(tag)
+
+        cover_path = self.db.cover(self.book_id, as_path=True)
+        if cover_path:
+            h.update(str(getsize(cover_path)))
+            h.update('\0')
+            with open(cover_path, 'rb') as file:
+                block = file.read(65536)
+                while len(block) > 0:
+                    h.update(block)
+                    block = file.read(65536)
+
+        return h.hexdigest()
+
     def append_metadata_req_parts(self):
         metadata = self.db.get_proxy_metadata(self.book_id)
         language = next(iter(metadata.languages), None)
@@ -283,6 +336,7 @@ class UploadWorker(QObject):
         if issued_on == '0101-01-01':
             issued_on = None
 
+        self.req_body.append(self.build_req_part('metadata[calibre_metadata_digest]', self.metadata_digest))
         self.req_body.append(self.build_req_part('metadata[title]', metadata.title))
         if summary:
             self.req_body.append(self.build_req_part('metadata[summary]', summary))
