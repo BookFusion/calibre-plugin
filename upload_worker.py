@@ -307,7 +307,7 @@ class UploadWorker(QObject):
         if series:
             h.update(series)
             if series_index:
-                h.update(series_index)
+                h.update(str(series_index))
         for author in metadata.authors:
             h.update(author)
         for tag in metadata.tags:
