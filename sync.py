@@ -9,11 +9,14 @@ from calibre_plugins.bookfusion.config import prefs
 from calibre_plugins.bookfusion.logger import Logger
 from calibre_plugins.bookfusion.check_worker import CheckWorker
 from calibre_plugins.bookfusion.upload_manager import UploadManager
+from calibre_plugins.bookfusion import api
 
 
 class SyncWidget(QWidget):
     def __init__(self, gui, do_user_config, selected_book_ids, is_sync_selected):
         QWidget.__init__(self, gui)
+
+        api.build_request('/limits')
 
         self.logger = Logger(path.join(gui.current_db.library_path, 'bookfusion_sync.log'))
         self.logger.info('Open sync dialog: selected_book_ids={}; is_sync_selected={}'.format(selected_book_ids, is_sync_selected))

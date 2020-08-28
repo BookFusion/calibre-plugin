@@ -17,9 +17,9 @@ def build_request(path, params={}):
 
     req = QNetworkRequest(url)
     req.setRawHeader(
-        'User-Agent',
-        'BookFusion Calibre Plugin {0}'.format(
-            '.'.join(str(x) for x in BookFusionPlugin.version)
-        )
+        u'User-Agent'.encode('utf-8'),
+        u'BookFusion Calibre Plugin {0}'.format(
+            str('.'.join(str(x) for x in BookFusionPlugin.version))
+        ).encode('utf-8')
     )
     return req

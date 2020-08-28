@@ -4,6 +4,10 @@ __license__ = 'GPL v3'
 from PyQt5.Qt import QWidget, QHBoxLayout, QVBoxLayout, QFormLayout, QLabel, QLineEdit, QCheckBox, QComboBox
 from calibre.utils.config import JSONConfig
 
+import sys
+if sys.version_info[0] >= 3:
+    unicode = str
+
 prefs = JSONConfig('plugins/bookfusion')
 
 prefs.defaults['api_key'] = ''

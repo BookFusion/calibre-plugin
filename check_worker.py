@@ -53,6 +53,7 @@ class CheckWorker(QObject):
 
     def fetch_limits(self):
         self.req = api.build_request('/limits')
+
         self.reply = self.network.get(self.req)
         self.reply.finished.connect(self.finish_fetch_limits)
 

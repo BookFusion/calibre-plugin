@@ -258,28 +258,28 @@ class UploadWorker(QObject):
         if issued_on == '0101-01-01':
             issued_on = None
 
-        h.update(metadata.title)
+        h.update(metadata.title.encode('utf-8'))
         if summary:
-            h.update(summary)
+            h.update(summary.encode('utf-8'))
         if language:
-            h.update(language)
+            h.update(language.encode('utf-8'))
         if isbn:
-            h.update(isbn)
+            h.update(isbn.encode('utf-8'))
         if issued_on:
-            h.update(issued_on)
+            h.update(issued_on.encode('utf-8'))
         if series:
-            h.update(series)
+            h.update(series.encode('utf-8'))
             if series_index:
-                h.update(str(series_index))
+                h.update(str(series_index).encode('utf-8'))
         for author in metadata.authors:
-            h.update(author)
+            h.update(author.encode('utf-8'))
         for tag in metadata.tags:
-            h.update(tag)
+            h.update(tag.encode('utf-8'))
 
         cover_path = self.db.cover(self.book_id, as_path=True)
         if cover_path:
-            h.update(str(path.getsize(cover_path)))
-            h.update('\0')
+            h.update(bytes(path.getsize(cover_path)))
+            h.update(b'\0')
             with open(cover_path, 'rb') as file:
                 block = file.read(65536)
                 while len(block) > 0:
@@ -345,7 +345,7 @@ class UploadWorker(QObject):
                 QNetworkRequest.ContentDispositionHeader,
                 'form-data; name="{}"'.format(self.escape_quotes(name))
             )
-            part.setBody(bytes(value))
+            part.setBody(value.encode('utf-8'))
         return part
 
     def complete_req(self, tag):
@@ -396,8 +396,8 @@ class UploadWorker(QObject):
             return
 
         h = sha256()
-        h.update(str(path.getsize(self.file_path)))
-        h.update('\0')
+        h.update(bytes(path.getsize(self.file_path)))
+        h.update(b'\0')
         with open(self.file_path, 'rb') as file:
             block = file.read(65536)
             while len(block) > 0:
