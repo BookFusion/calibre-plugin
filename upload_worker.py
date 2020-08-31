@@ -30,6 +30,8 @@ class UploadWorker(QObject):
         self.reply = None
         self.canceled = False
 
+        self.retries = 0
+
     def start(self):
         self.network = QNetworkAccessManager()
         self.network.authenticationRequired.connect(self.auth)
@@ -146,16 +148,22 @@ class UploadWorker(QObject):
         self.reply.finished.connect(self.complete_init_upload)
 
     def complete_init_upload(self):
-        resp = self.complete_req('Upload init')
+        resp, retry, abort = self.complete_req('Upload init')
 
-        if not self.abort:
-            if resp is not None:
-                data = json.loads(resp.data())
-                self.upload_url = data['url']
-                self.upload_params = data['params']
-                self.upload()
-            else:
-                self.readyForNext.emit(self.index)
+        if retry:
+            self.init_upload()
+            return
+
+        if abort:
+            return
+
+        if resp is not None:
+            data = json.loads(resp.data())
+            self.upload_url = data['url']
+            self.upload_params = data['params']
+            self.upload()
+        else:
+            self.readyForNext.emit(self.index)
 
     def upload(self):
         self.file = QFile(self.file_path)
@@ -177,13 +185,19 @@ class UploadWorker(QObject):
         if self.file:
             self.file.close()
 
-        resp = self.complete_req('Upload')
+        resp, retry, abort = self.complete_req('Upload')
 
-        if not self.abort:
-            if resp is not None:
-                self.finalize_upload()
-            else:
-                self.readyForNext.emit(self.index)
+        if retry:
+            self.upload()
+            return
+
+        if abort:
+            return
+
+        if resp is not None:
+            self.finalize_upload()
+        else:
+            self.readyForNext.emit(self.index)
 
     def finalize_upload(self):
         self.req = api.build_request('/uploads/finalize')
@@ -199,14 +213,20 @@ class UploadWorker(QObject):
     def complete_finalize_upload(self):
         self.clean_metadata_req()
 
-        resp = self.complete_req('Upload finalize')
+        resp, retry, abort = self.complete_req('Upload finalize')
 
-        if not self.abort:
-            if resp is not None:
-                self.set_bookfusion_id(json.loads(resp.data())['id'])
-                self.uploaded.emit(self.book_id)
+        if retry:
+            self.finalize_upload()
+            return
 
-            self.readyForNext.emit(self.index)
+        if abort:
+            return
+
+        if resp is not None:
+            self.set_bookfusion_id(json.loads(resp.data())['id'])
+            self.uploaded.emit(self.book_id)
+
+        self.readyForNext.emit(self.index)
 
     def update(self):
         if not prefs['update_metadata']:
@@ -230,13 +250,19 @@ class UploadWorker(QObject):
     def complete_update(self):
         self.clean_metadata_req()
 
-        resp = self.complete_req('Update')
+        resp, retry, abort = self.complete_req('Update')
 
-        if not self.abort:
-            if resp is not None:
-                self.updated.emit(self.book_id)
+        if retry:
+            self.update()
+            return
 
-            self.readyForNext.emit(self.index)
+        if abort:
+            return
+
+        if resp is not None:
+            self.updated.emit(self.book_id)
+
+        self.readyForNext.emit(self.index)
 
     def upload_progress(self, sent, total):
         self.uploadProgress.emit(self.book_id, sent, total)
@@ -349,21 +375,21 @@ class UploadWorker(QObject):
         return part
 
     def complete_req(self, tag):
-        self.abort = False
+        retry = False
+        abort = False
 
         if self.canceled:
-            self.abort = True
+            abort = True
 
         error = self.reply.error()
+        resp = None
         if error == QNetworkReply.AuthenticationRequiredError:
-            self.abort = True
+            abort = True
             self.aborted.emit('Invalid API key.')
             self.log_info('{}: AuthenticationRequiredError'.format(tag))
         elif error == QNetworkReply.NoError:
             resp = self.reply.readAll()
             self.log_info('{} response: {}'.format(tag, resp))
-
-            return resp
         elif error == QNetworkReply.UnknownContentError:
             if self.reply.attribute(QNetworkRequest.HttpStatusCodeAttribute) == 422:
                 resp = self.reply.readAll()
@@ -380,16 +406,37 @@ class UploadWorker(QObject):
             self.log_info('{}: UnknownServerError'.format(tag))
             resp = self.reply.readAll()
             self.log_info('{} response: {}'.format(tag, resp))
+        elif error == QNetworkReply.ConnectionRefusedError or \
+             error == QNetworkReply.RemoteHostClosedError or \
+             error == QNetworkReply.HostNotFoundError or \
+             error == QNetworkReply.TimeoutError or \
+             error == QNetworkReply.TemporaryNetworkFailureError:
+            retry = True
+            self.log_info('{}: {}'.format(tag, error))
         elif error == QNetworkReply.OperationCanceledError:
-            self.abort = True
+            abort = True
             self.log_info('{}: OperationCanceledError'.format(tag))
         else:
-            self.abort = True
+            abort = True
             self.aborted.emit('Error {}.'.format(error))
             self.log_info('{} error: {}'.format(tag, error))
 
         self.reply.deleteLater()
         self.reply = None
+
+        if retry:
+            self.retries += 1
+
+            if self.retries > 2:
+                self.retries = 0
+                self.aborted.emit('Error {}.'.format(error))
+                retry = False
+            else:
+                abort = False
+        else:
+            self.retries = 0
+
+        return (resp, retry, abort)
 
     def calculate_digest(self):
         if self.digest is not None:
