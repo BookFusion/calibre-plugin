@@ -338,7 +338,7 @@ class UploadWorker(QObject):
         if series:
             self.req_body.append(self.build_req_part('metadata[series][][title]', series))
             if series_index:
-                self.req_body.append(self.build_req_part('metadata[series][][index]', series_index))
+                self.req_body.append(self.build_req_part('metadata[series][][index]', str(series_index)))
         for author in metadata.authors:
             self.req_body.append(self.build_req_part('metadata[author_list][]', author))
         for tag in metadata.tags:
