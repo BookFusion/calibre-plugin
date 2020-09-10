@@ -392,20 +392,20 @@ class UploadWorker(QObject):
             self.log_info('{} response: {}'.format(tag, resp))
         elif error == QNetworkReply.UnknownContentError:
             if self.reply.attribute(QNetworkRequest.HttpStatusCodeAttribute) == 422:
-                resp = self.reply.readAll()
-                self.log_info('{} response: {}'.format(tag, resp))
-                msg = json.loads(resp.data())['error']
+                err_resp = self.reply.readAll()
+                self.log_info('{} response: {}'.format(tag, err_resp))
+                msg = json.loads(err_resp.data())['error']
                 self.failed.emit(self.book_id, msg)
             else:
                 self.log_info('{}: UnknownContentError'.format(tag))
         elif error == QNetworkReply.InternalServerError:
             self.log_info('{}: InternalServerError'.format(tag))
-            resp = self.reply.readAll()
-            self.log_info('{} response: {}'.format(tag, resp))
+            err_resp = self.reply.readAll()
+            self.log_info('{} response: {}'.format(tag, err_resp))
         elif error == QNetworkReply.UnknownServerError:
             self.log_info('{}: UnknownServerError'.format(tag))
-            resp = self.reply.readAll()
-            self.log_info('{} response: {}'.format(tag, resp))
+            err_resp = self.reply.readAll()
+            self.log_info('{} response: {}'.format(tag, err_resp))
         elif error == QNetworkReply.ConnectionRefusedError or \
              error == QNetworkReply.RemoteHostClosedError or \
              error == QNetworkReply.HostNotFoundError or \
