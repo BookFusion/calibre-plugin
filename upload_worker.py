@@ -148,7 +148,7 @@ class UploadWorker(QObject):
         self.reply.finished.connect(self.complete_init_upload)
 
     def complete_init_upload(self):
-        resp, retry, abort = self.complete_req('Upload init')
+        resp, retry, abort = self.complete_req('Upload init', return_json = True)
 
         if retry:
             self.init_upload()
@@ -158,9 +158,8 @@ class UploadWorker(QObject):
             return
 
         if resp is not None:
-            data = json.loads(resp.data())
-            self.upload_url = data['url']
-            self.upload_params = data['params']
+            self.upload_url = resp['url']
+            self.upload_params = resp['params']
             self.upload()
         else:
             self.readyForNext.emit(self.index)
@@ -213,7 +212,7 @@ class UploadWorker(QObject):
     def complete_finalize_upload(self):
         self.clean_metadata_req()
 
-        resp, retry, abort = self.complete_req('Upload finalize')
+        resp, retry, abort = self.complete_req('Upload finalize', return_json = True)
 
         if retry:
             self.finalize_upload()
@@ -223,7 +222,7 @@ class UploadWorker(QObject):
             return
 
         if resp is not None:
-            self.set_bookfusion_id(json.loads(resp.data())['id'])
+            self.set_bookfusion_id(resp['id'])
             self.uploaded.emit(self.book_id)
 
         self.readyForNext.emit(self.index)
@@ -374,7 +373,7 @@ class UploadWorker(QObject):
             part.setBody(value.encode('utf-8'))
         return part
 
-    def complete_req(self, tag):
+    def complete_req(self, tag, return_json = False):
         retry = False
         abort = False
 
@@ -390,6 +389,13 @@ class UploadWorker(QObject):
         elif error == QNetworkReply.NoError:
             resp = self.reply.readAll()
             self.log_info('{} response: {}'.format(tag, resp))
+            if return_json:
+                try:
+                    resp = json.loads(resp.data())
+                except ValueError as e:
+                    resp = None
+                    self.log_info('{}: {}'.format(tag, e))
+                    self.failed.emit(self.book_id, 'Cannot parse the server response')
         elif error == QNetworkReply.UnknownContentError:
             if self.reply.attribute(QNetworkRequest.HttpStatusCodeAttribute) == 422:
                 err_resp = self.reply.readAll()
