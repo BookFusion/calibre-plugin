@@ -294,7 +294,7 @@ class UploadWorker(QObject):
             h.update(issued_on.encode('utf-8'))
         if series:
             h.update(series.encode('utf-8'))
-            if series_index:
+            if series_index is not None:
                 h.update(str(series_index).encode('utf-8'))
         for author in metadata.authors:
             h.update(author.encode('utf-8'))
@@ -336,7 +336,7 @@ class UploadWorker(QObject):
             self.req_body.append(self.build_req_part('metadata[issued_on]', issued_on))
         if series:
             self.req_body.append(self.build_req_part('metadata[series][][title]', series))
-            if series_index:
+            if series_index is not None:
                 self.req_body.append(self.build_req_part('metadata[series][][index]', str(series_index)))
         for author in metadata.authors:
             self.req_body.append(self.build_req_part('metadata[author_list][]', author))
