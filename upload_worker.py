@@ -278,8 +278,6 @@ class UploadWorker(QObject):
         summary = metadata.comments
         isbn = metadata.isbn
         issued_on = metadata.pubdate.date().isoformat()
-        series = metadata.series
-        series_index = metadata.series_index
         if issued_on == '0101-01-01':
             issued_on = None
 
@@ -292,10 +290,12 @@ class UploadWorker(QObject):
             h.update(isbn.encode('utf-8'))
         if issued_on:
             h.update(issued_on.encode('utf-8'))
-        if series:
-            h.update(series.encode('utf-8'))
-            if series_index is not None:
-                h.update(str(series_index).encode('utf-8'))
+
+        for series_item in self.get_series(metadata):
+            h.update(series_item['title'].encode('utf-8'))
+            if series_item['index'] is not None:
+                h.update(str(series_item['index']).encode('utf-8'))
+
         for author in metadata.authors:
             h.update(author.encode('utf-8'))
         for tag in metadata.tags:
@@ -324,8 +324,6 @@ class UploadWorker(QObject):
         summary = metadata.comments
         isbn = metadata.isbn
         issued_on = metadata.pubdate.date().isoformat()
-        series = metadata.series
-        series_index = metadata.series_index
         if issued_on == '0101-01-01':
             issued_on = None
 
@@ -339,10 +337,12 @@ class UploadWorker(QObject):
             self.req_body.append(self.build_req_part('metadata[isbn]', isbn))
         if issued_on:
             self.req_body.append(self.build_req_part('metadata[issued_on]', issued_on))
-        if series:
-            self.req_body.append(self.build_req_part('metadata[series][][title]', series))
-            if series_index is not None:
-                self.req_body.append(self.build_req_part('metadata[series][][index]', str(series_index)))
+
+        for series_item in self.get_series(metadata):
+            self.req_body.append(self.build_req_part('metadata[series][][title]', series_item['title']))
+            if series_item['index'] is not None:
+                self.req_body.append(self.build_req_part('metadata[series][][index]', str(series_item['index'])))
+
         for author in metadata.authors:
             self.req_body.append(self.build_req_part('metadata[author_list][]', author))
         for tag in metadata.tags:
@@ -492,3 +492,22 @@ class UploadWorker(QObject):
                 return [bookshelves]
         else:
             return None
+
+    def get_series(self, metadata):
+        series_items = []
+        if metadata.series:
+            series_items.append({'title': metadata.series, 'index': metadata.series_index})
+
+        for key, meta in self.db.field_metadata.custom_iteritems():
+            if meta['datatype'] == 'series':
+                title = getattr(metadata, key)
+                if title:
+                    found = False
+                    for series_item in series_items:
+                        if series_item['title'].lower == title.lower:
+                            found = True
+                    if not found:
+                        index = getattr(metadata, key + '_index')
+                        series_items.append({'title': title, 'index': index})
+
+        return series_items
