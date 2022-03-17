@@ -3,6 +3,7 @@ __license__ = 'GPL v3'
 
 from PyQt5.Qt import QWidget, QHBoxLayout, QVBoxLayout, QFormLayout, QLabel, QLineEdit, QCheckBox, QComboBox
 from calibre.utils.config import JSONConfig
+from calibre.gui2 import get_current_db
 
 import sys
 if sys.version_info[0] >= 3:
@@ -15,6 +16,7 @@ prefs.defaults['api_base'] = 'https://www.bookfusion.com/calibre-api/v1'
 prefs.defaults['debug'] = True
 prefs.defaults['update_metadata'] = False
 prefs.defaults['threads'] = 2
+prefs.defaults['bookshelves_custom_column'] = ''
 
 
 class ConfigWidget(QWidget):
@@ -67,8 +69,20 @@ class ConfigWidget(QWidget):
         self.threads.setCurrentText(str(prefs['threads']))
         self.form.addRow('Sync Threads:', self.threads)
 
+        self.bookshelves_custom_column = QComboBox(self)
+        self.bookshelves_custom_column.addItem('')
+        option_count = 0
+        for key, meta in get_current_db().new_api.field_metadata.custom_iteritems():
+            if meta['datatype'] == 'text':
+                self.bookshelves_custom_column.addItem(key)
+                option_count += 1
+        self.bookshelves_custom_column.setCurrentText(prefs['bookshelves_custom_column'])
+        if option_count > 0:
+            self.form.addRow('Bookshelves Column:', self.bookshelves_custom_column)
+
     def save_settings(self):
         prefs['api_key'] = unicode(self.api_key.text())
         prefs['debug'] = self.debug.isChecked()
         prefs['update_metadata'] = self.update_metadata.isChecked()
         prefs['threads'] = int(self.threads.currentText())
+        prefs['bookshelves_custom_column'] = unicode(self.bookshelves_custom_column.currentText())

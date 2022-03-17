@@ -301,6 +301,11 @@ class UploadWorker(QObject):
         for tag in metadata.tags:
             h.update(tag.encode('utf-8'))
 
+        bookshelves = self.get_bookshelves(metadata)
+        if bookshelves is not None:
+            for bookshelf in bookshelves:
+                h.update(bookshelf.encode('utf-8'))
+
         cover_path = self.db.cover(self.book_id, as_path=True)
         if cover_path:
             h.update(bytes(path.getsize(cover_path)))
@@ -342,6 +347,12 @@ class UploadWorker(QObject):
             self.req_body.append(self.build_req_part('metadata[author_list][]', author))
         for tag in metadata.tags:
             self.req_body.append(self.build_req_part('metadata[tag_list][]', tag))
+
+        bookshelves = self.get_bookshelves(metadata)
+        if bookshelves is not None:
+            self.req_body.append(self.build_req_part('metadata[bookshelves][]', ''))
+            for bookshelf in bookshelves:
+                self.req_body.append(self.build_req_part('metadata[bookshelves][]', bookshelf))
 
         cover_path = self.db.cover(self.book_id, as_path=True)
         if cover_path:
@@ -465,3 +476,19 @@ class UploadWorker(QObject):
         identifiers = self.db.get_proxy_metadata(self.book_id).identifiers
         identifiers['bookfusion'] = str(bookfusion_id)
         self.db.set_field('identifiers', {self.book_id: identifiers})
+
+    def get_bookshelves(self, metadata):
+        bookshelves_custom_column = prefs['bookshelves_custom_column']
+        if bookshelves_custom_column:
+            try:
+                bookshelves = getattr(metadata, bookshelves_custom_column)
+            except AttributeError:
+                return None
+            if bookshelves is None:
+                return []
+            if isinstance(bookshelves, list):
+                return bookshelves
+            else:
+                return [bookshelves]
+        else:
+            return None
