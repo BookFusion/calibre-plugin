@@ -71,14 +71,11 @@ class ConfigWidget(QWidget):
 
         self.bookshelves_custom_column = QComboBox(self)
         self.bookshelves_custom_column.addItem('')
-        option_count = 0
         for key, meta in get_current_db().new_api.field_metadata.custom_iteritems():
             if meta['datatype'] == 'text':
                 self.bookshelves_custom_column.addItem(key)
-                option_count += 1
         self.bookshelves_custom_column.setCurrentText(prefs['bookshelves_custom_column'])
-        if option_count > 0:
-            self.form.addRow('Bookshelves Column:', self.bookshelves_custom_column)
+        self.form.addRow('Bookshelves Column:', self.bookshelves_custom_column)
 
     def save_settings(self):
         prefs['api_key'] = unicode(self.api_key.text())
