@@ -504,7 +504,7 @@ class UploadWorker(QObject):
                 if title:
                     found = False
                     for series_item in series_items:
-                        if series_item['title'].lower == title.lower:
+                        if series_item['title'].lower() == title.lower():
                             found = True
                     if not found:
                         index = getattr(metadata, key + '_index')
