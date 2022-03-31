@@ -20,12 +20,13 @@ class UploadManager(QObject):
     failed = pyqtSignal(int, str)
     aborted = pyqtSignal(str)
 
-    def __init__(self, db, logger, book_ids):
+    def __init__(self, db, logger, book_ids, reupload):
         QObject.__init__(self)
 
         self.db = db
         self.logger = logger
         self.pending_book_ids = book_ids
+        self.reupload = reupload
         self.canceled = False
 
         self.finished_count = 0
@@ -38,7 +39,7 @@ class UploadManager(QObject):
             thread = QThread(self)
             self.finished.connect(thread.quit)
 
-            worker = UploadWorker(index, self.db, self.logger)
+            worker = UploadWorker(index, self.reupload, self.db, self.logger)
             worker.readyForNext.connect(self.sync)
             worker.uploadProgress.connect(self.uploadProgress)
             worker.uploaded.connect(self.uploaded)

@@ -20,10 +20,11 @@ class UploadWorker(QObject):
     failed = pyqtSignal(int, str)
     aborted = pyqtSignal(str)
 
-    def __init__(self, index, db, logger):
+    def __init__(self, index, reupload, db, logger):
         QObject.__init__(self)
 
         self.index = index
+        self.reupload = reupload
         self.db = db
         self.logger = logger
         self.api_key = prefs['api_key']
@@ -127,7 +128,7 @@ class UploadWorker(QObject):
                 self.readyForNext.emit(self.index)
             else:
                 self.metadata_digest = self.get_metadata_digest()
-                if not result is None and self.metadata_digest == result['calibre_metadata_digest']:
+                if not result is None and self.metadata_digest == result['calibre_metadata_digest'] and not self.reupload:
                     self.skipped.emit(self.book_id)
                     self.readyForNext.emit(self.index)
                 else:
@@ -228,19 +229,25 @@ class UploadWorker(QObject):
         self.readyForNext.emit(self.index)
 
     def update(self):
-        if not prefs['update_metadata']:
+        if not prefs['update_metadata'] and not self.reupload:
             self.skipped.emit(self.book_id)
             self.readyForNext.emit(self.index)
             return
 
         identifiers = self.db.get_proxy_metadata(self.book_id).identifiers
-        if not identifiers.get('bookfusion'):
+        if not identifiers.get('bookfusion') and not self.reupload:
             self.skipped.emit(self.book_id)
             self.readyForNext.emit(self.index)
             return
 
         self.req = api.build_request('/uploads/' + identifiers['bookfusion'])
         self.req_body = QHttpMultiPart(QHttpMultiPart.FormDataType)
+
+        if self.reupload:
+            self.file = QFile(self.file_path)
+            self.file.open(QIODevice.ReadOnly)
+            self.req_body.append(self.build_req_part('file', self.file))
+
         self.append_metadata_req_parts()
 
         self.reply = self.network.put(self.req, self.req_body)

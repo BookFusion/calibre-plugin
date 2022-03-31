@@ -2,7 +2,7 @@ __copyright__ = '2018, BookFusion <legal@bookfusion.com>'
 __license__ = 'GPL v3'
 
 from PyQt5.Qt import Qt, QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QMessageBox, QLabel, QProgressBar, QThread, \
-    QTableWidget, QTableWidgetItem, QRadioButton
+    QTableWidget, QTableWidgetItem, QRadioButton, QCheckBox
 from os import path
 
 from calibre_plugins.bookfusion.config import prefs
@@ -49,9 +49,21 @@ class SyncWidget(QWidget):
                 'book' if len(selected_book_ids) == 1 else 'books'
             )
         self.sync_selected_radio = QRadioButton(sync_selected_radio_label)
+        self.sync_selected_radio.toggled.connect(self.toggle_sync_selected)
         self.sync_selected_radio.setChecked(is_sync_selected)
         self.sync_selected_radio.setEnabled(len(selected_book_ids) > 0)
         self.radio_layout.addWidget(self.sync_selected_radio)
+
+        self.reupload_possible = len(selected_book_ids) > 0 and len(selected_book_ids) <= 100
+        if self.reupload_possible:
+            for book_id in selected_book_ids:
+                identifiers = self.db.get_proxy_metadata(book_id).identifiers
+                if not identifiers.get('bookfusion'):
+                    self.reupload_possible = False
+
+        self.reupload_checkbox = QCheckBox('Re-upload book files', self)
+        self.reupload_checkbox.setVisible(is_sync_selected and self.reupload_possible)
+        self.radio_layout.addWidget(self.reupload_checkbox)
 
         self.btn_layout = QHBoxLayout()
         self.l.addLayout(self.btn_layout)
@@ -103,7 +115,22 @@ class SyncWidget(QWidget):
         configured = bool(prefs['api_key'])
         self.start_btn.setEnabled(configured)
 
+    def toggle_sync_selected(self, is_sync_selected):
+        if hasattr(self, 'reupload_checkbox'):
+            self.reupload_checkbox.setVisible(is_sync_selected and self.reupload_possible)
+
     def start(self):
+        if self.sync_selected_radio.isChecked() and self.reupload_checkbox.isChecked():
+            reply = QMessageBox.question(
+                self,
+                'BookFusion Sync',
+                'Re-uploading book files can potentially result in previous highlights or bookmarks no longer working.\n\nPreviously uploaded files will be overwritten. Are you sure you want to re-upload?',
+                QMessageBox.No | QMessageBox.Yes,
+                QMessageBox.Yes
+            )
+            if reply != QMessageBox.Yes:
+                return
+
         self.worker = None
         self.valid_book_ids = None
         self.book_log_map = {}
@@ -191,7 +218,7 @@ class SyncWidget(QWidget):
 
         self.total = len(book_ids)
 
-        self.worker = UploadManager(self.db, self.logger, book_ids)
+        self.worker = UploadManager(self.db, self.logger, book_ids, self.sync_selected_radio.isChecked() and self.reupload_checkbox.isChecked())
         self.worker.finished.connect(self.finish_sync)
         self.worker.finished.connect(self.worker_thread.quit)
         self.worker.progress.connect(self.update_progress)
