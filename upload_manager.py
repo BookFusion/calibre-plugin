@@ -3,6 +3,9 @@ __license__ = 'GPL v3'
 
 from PyQt5.Qt import QObject, pyqtSignal, QThread
 
+import urllib.request
+import urllib.error
+
 from calibre_plugins.bookfusion.config import prefs
 from calibre_plugins.bookfusion.book_format import BookFormat
 from calibre_plugins.bookfusion.upload_worker import UploadWorker
@@ -40,6 +43,7 @@ class UploadManager(QObject):
             self.finished.connect(thread.quit)
 
             worker = UploadWorker(index, self.reupload, self.db, self.logger)
+            worker.moveToThread(thread)
             worker.readyForNext.connect(self.sync)
             worker.uploadProgress.connect(self.uploadProgress)
             worker.uploaded.connect(self.uploaded)
@@ -50,6 +54,7 @@ class UploadManager(QObject):
             thread.started.connect(worker.start)
             thread.start()
             self.workers.append([worker, thread])
+            self.logger.info('starting worker %s' % index)
 
         self.count = 0
 
@@ -77,7 +82,7 @@ class UploadManager(QObject):
         if book_format.file_path:
             self.started.emit(book_id)
             worker, _ = self.workers[index]
-            worker.sync(book_id, book_format.file_path)
+            worker.syncRequested.emit(book_id, book_format.file_path)
         else:
             self.failed.emit(book_id, 'unsupported format')
             self.readyForNext.emit(index)
