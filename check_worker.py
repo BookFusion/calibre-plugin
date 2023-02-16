@@ -1,11 +1,11 @@
 __copyright__ = '2018, BookFusion <legal@bookfusion.com>'
 __license__ = 'GPL v3'
 
-from PyQt5.Qt import QObject, pyqtSignal
+from PyQt5.Qt import QObject, pyqtSignal, QNetworkAccessManager, QNetworkReply
 from os.path import getsize
 import json
-import urllib.error
 
+from calibre_plugins.bookfusion.config import prefs
 from calibre_plugins.bookfusion import api
 from calibre_plugins.bookfusion.book_format import BookFormat
 
@@ -24,10 +24,13 @@ class CheckWorker(QObject):
         self.db = db
         self.logger = logger
         self.book_ids = book_ids
+        self.api_key = prefs['api_key']
         self.reply = None
         self.canceled = False
 
     def start(self):
+        self.network = QNetworkAccessManager()
+        self.network.authenticationRequired.connect(self.auth)
         self.readyToRunCheck.connect(self.run_check)
 
         self.pending_book_ids = self.book_ids
@@ -43,26 +46,43 @@ class CheckWorker(QObject):
             self.reply.abort()
         self.finished.emit()
 
+    def auth(self, reply, authenticator):
+        if not authenticator.user():
+            authenticator.setUser(self.api_key)
+            authenticator.setPassword('')
+
     def fetch_limits(self):
-        req = api.build_request('/limits')
+        self.req = api.build_request('/limits')
+
+        self.reply = self.network.get(self.req)
+        self.reply.finished.connect(self.finish_fetch_limits)
+
+    def finish_fetch_limits(self):
+        if self.canceled:
+            return
 
         abort = False
 
-        try:
-            with api.build_opener().open(req) as f:
-                resp = f.read()
-                self.logger.info('Fetch limits response: {}'.format(resp))
-                self.limits = json.loads(resp)
-                self.limitsAvailable.emit(self.limits)
-        except urllib.error.HTTPError as e:
-            if e.code == 401:
-                abort = True
-                self.aborted.emit('Invalid API key.')
-                self.logger.info('Fetch limits: 401')
-            else:
-                abort = True
-                self.aborted.emit('Error {}.'.format(e.code))
-                self.logger.info('Fetch limits error: {}'.format(e.code))
+        error = self.reply.error()
+        if error == QNetworkReply.NetworkError.AuthenticationRequiredError:
+            abort = True
+            self.aborted.emit('Invalid API key.')
+            self.logger.info('Fetch limits: AuthenticationRequiredError')
+        elif error == QNetworkReply.NetworkError.NoError:
+            resp = self.reply.readAll()
+            self.logger.info('Fetch limits response: {}'.format(resp))
+            self.limits = json.loads(resp.data())
+            self.limitsAvailable.emit(self.limits)
+        elif error == QNetworkReply.NetworkError.OperationCanceledError:
+            abort = True
+            self.logger.info('Fetch limits: OperationCanceledError')
+        else:
+            abort = True
+            self.aborted.emit('Error {}.'.format(error))
+            self.logger.info('Fetch limits error: {}'.format(error))
+
+        self.reply.deleteLater()
+        self.reply = None
 
         if abort:
             self.finished.emit()

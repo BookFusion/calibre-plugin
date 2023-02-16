@@ -3,9 +3,6 @@ __license__ = 'GPL v3'
 
 from PyQt5.Qt import QObject, pyqtSignal, QThread
 
-import urllib.request
-import urllib.error
-
 from calibre_plugins.bookfusion.config import prefs
 from calibre_plugins.bookfusion.book_format import BookFormat
 from calibre_plugins.bookfusion.upload_worker import UploadWorker
