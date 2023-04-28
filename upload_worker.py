@@ -1,7 +1,7 @@
 __copyright__ = '2018, BookFusion <legal@bookfusion.com>'
 __license__ = 'GPL v3'
 
-from PyQt5.Qt import QObject, pyqtSignal, QNetworkAccessManager, QNetworkRequest, QUrl, QNetworkReply, \
+from PyQt5.Qt import QObject, pyqtSignal, QNetworkRequest, QUrl, QNetworkReply, \
     QHttpMultiPart, QHttpPart, QFile, QFileInfo, QIODeviceBase
 from os import path
 from hashlib import sha256
@@ -21,14 +21,14 @@ class UploadWorker(QObject):
     failed = pyqtSignal(int, str)
     aborted = pyqtSignal(str)
 
-    def __init__(self, index, reupload, db, logger):
+    def __init__(self, index, reupload, db, logger, network):
         QObject.__init__(self)
 
         self.index = index
         self.reupload = reupload
         self.db = db
         self.logger = logger
-        self.api_key = prefs['api_key']
+        self.network = network
         self.reply = None
         self.canceled = False
 
@@ -36,10 +36,6 @@ class UploadWorker(QObject):
 
     def start(self):
         self.syncRequested.connect(self.sync)
-
-        self.network = QNetworkAccessManager()
-        self.network.authenticationRequired.connect(self.auth)
-
         self.readyForNext.emit(self.index)
 
     def cancel(self):
@@ -48,15 +44,12 @@ class UploadWorker(QObject):
             self.reply.abort()
 
     def sync(self, book_id, file_path):
+        self.log_info('Sync: book_id={}'.format(book_id))
+
         self.book_id = book_id
         self.file_path = file_path
 
         self.check()
-
-    def auth(self, reply, authenticator):
-        if not authenticator.user():
-            authenticator.setUser(self.api_key)
-            authenticator.setPassword('')
 
     def check(self):
         self.digest = None
