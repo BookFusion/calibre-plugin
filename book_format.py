@@ -9,16 +9,24 @@ class BookFormat:
     ]
     PREFERRED_FMTS = ['EPUB', 'MOBI']
 
-    def __init__(self, db, book_id):
+    def __init__(self, db, book_id, preferred_fmt=None):
         self.file_path = None
         self.fmt = None
 
         fmts = db.formats(book_id)
         if len(fmts) > 0:
             fmt = fmts[0]
-            for preferred_fmt in self.PREFERRED_FMTS:
-                if preferred_fmt in fmts:
-                    fmt = preferred_fmt
+
+            preference_list = []
+            if preferred_fmt:
+                preference_list.append(preferred_fmt)
+            for f in self.PREFERRED_FMTS:
+                if f not in preference_list:
+                    preference_list.append(f)
+
+            for pref in preference_list:
+                if pref in fmts:
+                    fmt = pref
                     break
 
             if fmt in self.SUPPORTED_FMTS:

@@ -99,7 +99,7 @@ class CheckWorker(QObject):
 
             self.logger.info('File: book_id={}'.format(book_id))
 
-            book_format = BookFormat(self.db, book_id)
+            book_format = BookFormat(self.db, book_id, prefs['preferred_format'])
 
             if book_format.file_path:
                 self.books_count += 1
