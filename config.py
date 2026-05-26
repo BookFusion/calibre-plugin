@@ -4,7 +4,6 @@ __license__ = 'GPL v3'
 from PyQt5.Qt import QWidget, QHBoxLayout, QVBoxLayout, QFormLayout, QLabel, QLineEdit, QCheckBox, QComboBox
 from calibre.utils.config import JSONConfig
 from calibre.gui2 import get_current_db
-
 import sys
 if sys.version_info[0] >= 3:
     unicode = str
@@ -17,6 +16,7 @@ prefs.defaults['debug'] = True
 prefs.defaults['update_metadata'] = False
 prefs.defaults['threads'] = 2
 prefs.defaults['bookshelves_custom_column'] = ''
+prefs.defaults['preferred_format'] = ''
 
 
 class ConfigWidget(QWidget):
@@ -77,9 +77,23 @@ class ConfigWidget(QWidget):
         self.bookshelves_custom_column.setCurrentText(prefs['bookshelves_custom_column'])
         self.form.addRow('Bookshelves Column:', self.bookshelves_custom_column)
 
+        supported_fmts = [
+            'AZW', 'AZW3', 'AZW4', 'CBZ', 'CBR', 'CBC', 'CHM', 'DJVU', 'DOCX', 'EPUB', 'FB2', 'FBZ', 'HTML', 'HTMLZ',
+            'LIT', 'LRF', 'MOBI', 'ODT', 'PDF', 'PRC', 'PDB', 'PML', 'RB', 'RTF', 'SNB', 'TCR', 'TXT', 'TXTZ'
+        ]
+        self.preferred_format = QComboBox(self)
+        self.preferred_format.addItem('Auto (EPUB > MOBI)', '')
+        for fmt in supported_fmts:
+            self.preferred_format.addItem(fmt, fmt)
+        saved_fmt = prefs['preferred_format']
+        index = self.preferred_format.findData(saved_fmt)
+        self.preferred_format.setCurrentIndex(index if index >= 0 else 0)
+        self.form.addRow('Preferred Format:', self.preferred_format)
+
     def save_settings(self):
         prefs['api_key'] = unicode(self.api_key.text())
         prefs['debug'] = self.debug.isChecked()
         prefs['update_metadata'] = self.update_metadata.isChecked()
         prefs['threads'] = int(self.threads.currentText())
         prefs['bookshelves_custom_column'] = unicode(self.bookshelves_custom_column.currentText())
+        prefs['preferred_format'] = self.preferred_format.currentData()

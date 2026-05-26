@@ -71,7 +71,7 @@ class UploadManager(QObject):
         book_id = self.pending_book_ids.pop()
         self.logger.info('Upload book: book_id={}; title={}'.format(book_id, self.db.get_proxy_metadata(book_id).title))
 
-        book_format = BookFormat(self.db, book_id)
+        book_format = BookFormat(self.db, book_id, prefs['preferred_format'])
 
         if book_format.file_path:
             self.started.emit(book_id)
