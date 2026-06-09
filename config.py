@@ -90,6 +90,10 @@ class ConfigWidget(QWidget):
         self.preferred_format.setCurrentIndex(index if index >= 0 else 0)
         self.form.addRow('Preferred Format:', self.preferred_format)
 
+        # Ensure the dialog opens tall enough to show every row (including the
+        # last "Preferred Format" field) without the user needing to scroll.
+        self.setMinimumHeight(self.sizeHint().height())
+
     def save_settings(self):
         prefs['api_key'] = unicode(self.api_key.text())
         prefs['debug'] = self.debug.isChecked()
